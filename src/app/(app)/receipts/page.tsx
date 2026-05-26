@@ -1,0 +1,75 @@
+import { createClient } from "@/lib/supabase/server";
+import { getUserRole } from "@/lib/auth";
+import ReceiptsList, { type ReceiptCard } from "@/components/ReceiptsList";
+import type { Department } from "@/lib/types";
+
+export const dynamic = "force-dynamic";
+
+interface ReceiptRow {
+  id: string;
+  vendor: string | null;
+  amount_total: number | null;
+  currency: string;
+  receipt_date: string | null;
+  image_path: string;
+  department_id: string | null;
+  department: { code: string; name: string } | null;
+}
+
+export default async function ReceiptsPage() {
+  const supabase = await createClient();
+  const role = await getUserRole();
+
+  // RLS already scopes crew to their own rows and lets admins see all,
+  // so we don't filter by user_id here.
+  const [{ data: receipts }, { data: departments }] = await Promise.all([
+    supabase
+      .from("receipts")
+      .select(
+        "id, vendor, amount_total, currency, receipt_date, image_path, department_id, department:departments(code, name)",
+      )
+      .order("created_at", { ascending: false })
+      .limit(30)
+      .returns<ReceiptRow[]>(),
+    supabase
+      .from("departments")
+      .select("id, code, name, display_order, active")
+      .eq("active", true)
+      .order("display_order")
+      .returns<Department[]>(),
+  ]);
+
+  const rows = receipts ?? [];
+
+  // Sign every thumbnail in one round trip (60s is plenty for a page render).
+  const paths = rows.map((r) => r.image_path);
+  const signed =
+    paths.length > 0
+      ? ((
+          await supabase.storage.from("receipts").createSignedUrls(paths, 60)
+        ).data ?? [])
+      : [];
+  const urlByPath = new Map(
+    signed.map((s) => [s.path ?? "", s.signedUrl] as const),
+  );
+
+  const cards: ReceiptCard[] = rows.map((r) => ({
+    id: r.id,
+    vendor: r.vendor,
+    amount_total: r.amount_total,
+    currency: r.currency,
+    receipt_date: r.receipt_date,
+    departmentId: r.department_id,
+    departmentCode: r.department?.code ?? null,
+    departmentName: r.department?.name ?? null,
+    thumbnailUrl: urlByPath.get(r.image_path) ?? null,
+  }));
+
+  return (
+    <ReceiptsList
+      cards={cards}
+      departments={departments ?? []}
+      isAdmin={role === "admin"}
+    />
+  );
+}
