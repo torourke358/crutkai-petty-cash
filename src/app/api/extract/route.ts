@@ -17,7 +17,7 @@ type ImageBlock = Anthropic.ImageBlockParam;
 
 async function callClaude(imageSource: ImageBlock["source"]) {
   const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY?.trim(),
+    apiKey: (process.env.ANTHROPIC_API_KEY ?? "").replace(/\s/g, ""),
   });
   return anthropic.messages.create({
     model: MODEL,

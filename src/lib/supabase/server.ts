@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { cleanEnv } from "@/lib/supabase/env";
 
 // Server-side Supabase client for Server Components, Server Actions, and
 // Route Handlers. Reads/writes the session via Next's cookie store, so RLS
@@ -8,8 +9,8 @@ export async function createClient() {
   const cookieStore = await cookies();
 
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!.trim(),
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!.trim(),
+    cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
     {
       cookies: {
         getAll() {
@@ -34,8 +35,8 @@ export async function createClient() {
 // operations (e.g. writing audit_log rows). Never expose to the browser.
 export function createServiceClient() {
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!.trim(),
-    process.env.SUPABASE_SERVICE_ROLE_KEY!.trim(),
+    cleanEnv(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    cleanEnv(process.env.SUPABASE_SERVICE_ROLE_KEY),
     {
       cookies: {
         getAll() {
