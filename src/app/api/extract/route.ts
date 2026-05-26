@@ -16,7 +16,9 @@ function stripFences(text: string): string {
 type ImageBlock = Anthropic.ImageBlockParam;
 
 async function callClaude(imageSource: ImageBlock["source"]) {
-  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const anthropic = new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY?.trim(),
+  });
   return anthropic.messages.create({
     model: MODEL,
     max_tokens: 1024,
