@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getUserRole } from "@/lib/auth";
 import ReceiptsList, { type ReceiptCard } from "@/components/ReceiptsList";
-import type { Department, Client } from "@/lib/types";
+import type { Department } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,8 @@ interface ReceiptRow {
   amount_total: number | null;
   currency: string;
   receipt_date: string | null;
-  image_path: string;
+  image_path: string | null;
+  notes: string | null;
   department_id: string | null;
   department: { code: string; name: string } | null;
 }
@@ -23,35 +24,29 @@ export default async function ReceiptsPage() {
 
   // RLS already scopes crew to their own rows and lets admins see all,
   // so we don't filter by user_id here.
-  const [{ data: receipts }, { data: departments }, { data: clients }] =
-    await Promise.all([
-      supabase
-        .from("receipts")
-        .select(
-          "id, user_id, vendor, amount_total, currency, receipt_date, image_path, department_id, department:departments(code, name)",
-        )
-        .order("created_at", { ascending: false })
-        .limit(30)
-        .returns<ReceiptRow[]>(),
-      supabase
-        .from("departments")
-        .select("id, code, name, display_order, active")
-        .eq("active", true)
-        .order("display_order")
-        .returns<Department[]>(),
-      supabase
-        .from("clients")
-        .select("id, name, is_overhead, active, display_order")
-        .eq("active", true)
-        .order("display_order")
-        .order("name")
-        .returns<Client[]>(),
-    ]);
+  const [{ data: receipts }, { data: departments }] = await Promise.all([
+    supabase
+      .from("receipts")
+      .select(
+        "id, user_id, vendor, amount_total, currency, receipt_date, image_path, notes, department_id, department:departments(code, name)",
+      )
+      .order("created_at", { ascending: false })
+      .limit(30)
+      .returns<ReceiptRow[]>(),
+    supabase
+      .from("departments")
+      .select("id, code, name, display_order, active")
+      .eq("active", true)
+      .order("display_order")
+      .returns<Department[]>(),
+  ]);
 
   const rows = receipts ?? [];
 
-  // Sign every thumbnail in one round trip (60s is plenty for a page render).
-  const paths = rows.map((r) => r.image_path);
+  // Sign thumbnails in one round trip; manual entries have no image_path.
+  const paths = rows
+    .map((r) => r.image_path)
+    .filter((p): p is string => !!p);
   const signed =
     paths.length > 0
       ? ((
@@ -84,10 +79,12 @@ export default async function ReceiptsPage() {
     amount_total: r.amount_total,
     currency: r.currency,
     receipt_date: r.receipt_date,
+    notes: r.notes,
     departmentId: r.department_id,
     departmentCode: r.department?.code ?? null,
     departmentName: r.department?.name ?? null,
-    thumbnailUrl: urlByPath.get(r.image_path) ?? null,
+    thumbnailUrl: r.image_path ? (urlByPath.get(r.image_path) ?? null) : null,
+    hasImage: !!r.image_path,
     uploaderName: isAdmin ? (nameById.get(r.user_id) ?? "Unknown") : null,
   }));
 
@@ -95,7 +92,6 @@ export default async function ReceiptsPage() {
     <ReceiptsList
       cards={cards}
       departments={departments ?? []}
-      clients={clients ?? []}
       isAdmin={role === "admin"}
     />
   );

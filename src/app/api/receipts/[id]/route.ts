@@ -8,7 +8,8 @@ const patchSchema = z.object({
   amount_total: z.number().nullable().optional(),
   currency: z.string().optional(),
   department_id: z.string().uuid().optional(),
-  client_id: z.string().uuid().optional(),
+  // Accepted but ignored — clients feature is hidden (kept for v2).
+  client_id: z.string().uuid().nullable().optional(),
   notes: z.string().nullable().optional(),
   status: z.enum(["submitted", "verified", "void"]).optional(),
 });
@@ -44,13 +45,12 @@ export async function PATCH(request: Request, ctx: Ctx) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  const normalized = {
-    ...parsed.data,
-    receipt_date:
-      parsed.data.receipt_date === undefined
-        ? undefined
-        : parsed.data.receipt_date || null,
-  };
+  // Drop client_id before writing — accepted for compatibility, never stored.
+  const normalized: Record<string, unknown> = { ...parsed.data };
+  delete normalized.client_id;
+  if (parsed.data.receipt_date !== undefined) {
+    normalized.receipt_date = parsed.data.receipt_date || null;
+  }
 
   const { data: after, error } = await supabase
     .from("receipts")

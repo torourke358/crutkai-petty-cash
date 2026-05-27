@@ -8,7 +8,7 @@ import { prepareImage } from "@/lib/image";
 import ReceiptFormFields, {
   type ReceiptFormValues,
 } from "@/components/ReceiptFormFields";
-import type { Department, Client, Confidence } from "@/lib/types";
+import type { Department, Confidence } from "@/lib/types";
 
 type Stage = "capture" | "preview" | "reading" | "verify";
 
@@ -22,7 +22,6 @@ const emptyValues: ReceiptFormValues = {
   amount_total: "",
   currency: "USD",
   department_id: "",
-  client_id: "",
   notes: "",
 };
 
@@ -32,11 +31,10 @@ export default function NewReceiptPage() {
 
   const [stage, setStage] = useState<Stage>("capture");
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [lastClientId, setLastClientId] = useState<string>("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [blob, setBlob] = useState<Blob | null>(null);
   const [imagePath, setImagePath] = useState<string | null>(null);
+  const [manual, setManual] = useState(false);
   const [values, setValues] = useState<ReceiptFormValues>(emptyValues);
   const [confidence, setConfidence] = useState<Confidence | null>(null);
   const [aiExtraction, setAiExtraction] = useState<unknown>(null);
@@ -60,34 +58,6 @@ export default function NewReceiptPage() {
       .eq("active", true)
       .order("display_order")
       .then(({ data }) => setDepartments((data as Department[]) ?? []));
-
-    supabase
-      .from("clients")
-      .select("id, name, is_overhead, active, display_order")
-      .eq("active", true)
-      .order("display_order")
-      .order("name")
-      .then(({ data }) => setClients((data as Client[]) ?? []));
-
-    // Default the client to the one this user used most recently (charters
-    // run for a while, so the last client is usually the right one).
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return;
-      supabase
-        .from("receipts")
-        .select("client_id")
-        .eq("user_id", user.id)
-        .not("client_id", "is", null)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .then(({ data }) => {
-          const id = (data?.[0]?.client_id as string) ?? "";
-          if (id) {
-            setLastClientId(id);
-            setValues((v) => ({ ...v, client_id: v.client_id || id }));
-          }
-        });
-    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -110,6 +80,7 @@ export default function NewReceiptPage() {
     e.target.value = ""; // allow re-selecting the same files later
     if (files.length === 0) return;
     setError(null);
+    setManual(false);
 
     if (files.length === 1) {
       // Single file: keep the preview → "Read receipt" flow.
@@ -122,7 +93,22 @@ export default function NewReceiptPage() {
     setQueue(files);
     setQueueIndex(0);
     setSavedCount(0);
-    processItem(0, files, lastClientId);
+    processItem(0, files);
+  }
+
+  // Start a manual, photo-less entry (e.g. paying a dayworker in cash).
+  function startManual() {
+    setError(null);
+    setManual(true);
+    setQueue([]);
+    setBlob(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    setImagePath(null);
+    setConfidence(null);
+    setAiExtraction(null);
+    setValues({ ...emptyValues, receipt_date: todayStr() });
+    setStage("verify");
   }
 
   async function prepareSingle(file: File) {
@@ -185,11 +171,11 @@ export default function NewReceiptPage() {
       setStage("preview");
       return;
     }
-    applyExtraction(result.path, result.extracted, lastClientId);
+    applyExtraction(result.path, result.extracted);
   }
 
   // Batch path: prepare, upload, and read the i-th file, then show its form.
-  async function processItem(i: number, files: File[], carryClient: string) {
+  async function processItem(i: number, files: File[]) {
     setError(null);
     setStage("reading");
     setImagePath(null);
@@ -210,14 +196,10 @@ export default function NewReceiptPage() {
       setError(`Upload failed for receipt ${i + 1} of ${files.length}.`);
       return; // user can Skip from the error
     }
-    applyExtraction(result.path, result.extracted, carryClient);
+    applyExtraction(result.path, result.extracted);
   }
 
-  function applyExtraction(
-    path: string,
-    extracted: Record<string, unknown>,
-    carryClient: string,
-  ) {
+  function applyExtraction(path: string, extracted: Record<string, unknown>) {
     if (extracted.error === "not_a_receipt") {
       setError(
         "We couldn't read this as a receipt. You can still enter the details by hand.",
@@ -233,7 +215,6 @@ export default function NewReceiptPage() {
         extracted.amount_total != null ? String(extracted.amount_total) : "",
       currency: (extracted.currency as string) || "USD",
       department_id: "",
-      client_id: carryClient,
       notes: (extracted.notes as string) ?? "",
     });
     setConfidence((extracted.confidence as Confidence) ?? null);
@@ -244,10 +225,9 @@ export default function NewReceiptPage() {
   }
 
   function advance() {
-    // Move to the next queued receipt, carrying the chosen client forward.
     const next = queueIndex + 1;
     setQueueIndex(next);
-    processItem(next, queue, values.client_id || lastClientId);
+    processItem(next, queue);
   }
 
   function skip() {
@@ -261,13 +241,14 @@ export default function NewReceiptPage() {
   }
 
   async function save() {
-    if (!imagePath) return;
+    // Photo flow needs an uploaded image; manual entries have none.
+    if (!manual && !imagePath) return;
     if (!values.department_id) {
       setError("Please choose a department.");
       return;
     }
-    if (!values.client_id) {
-      setError("Please choose a client to bill to.");
+    if (manual && (!values.vendor || !values.receipt_date || !values.amount_total)) {
+      setError("Vendor, date, and amount are required.");
       return;
     }
     setSaving(true);
@@ -277,16 +258,15 @@ export default function NewReceiptPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        image_path: imagePath,
+        image_path: manual ? null : imagePath,
         vendor: values.vendor || null,
         receipt_date: values.receipt_date || null,
         amount_total: values.amount_total ? Number(values.amount_total) : null,
         currency: values.currency,
         department_id: values.department_id,
-        client_id: values.client_id,
         notes: values.notes || null,
-        ai_extraction: aiExtraction,
-        ai_confidence: confidence,
+        ai_extraction: manual ? null : aiExtraction,
+        ai_confidence: manual ? null : confidence,
       }),
     });
 
@@ -297,7 +277,6 @@ export default function NewReceiptPage() {
     }
 
     setSavedCount((n) => n + 1);
-    setLastClientId(values.client_id);
 
     if (hasMore) advance();
     else finish();
@@ -310,7 +289,7 @@ export default function NewReceiptPage() {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-lg font-semibold text-slate-900">
-          New receipt{stepLabel}
+          {manual ? "Manual entry" : `New receipt${stepLabel}`}
         </h1>
         <Link href="/receipts" className="text-sm text-slate-500">
           {savedCount > 0 ? "Done" : "Cancel"}
@@ -365,10 +344,17 @@ export default function NewReceiptPage() {
           >
             Choose from library
           </button>
+          <button
+            onClick={startManual}
+            className="flex w-full items-center justify-center rounded-xl bg-white px-4 py-4 text-base font-medium text-slate-700 ring-1 ring-slate-200"
+          >
+            Add without photo
+          </button>
           <p className="text-center text-xs text-slate-400">
             Tip: select several receipts at once from the library. If a receipt
             is already on a screen, upload the image or a screenshot instead of
-            photographing the monitor — it reads far more reliably.
+            photographing the monitor — it reads far more reliably. Use “Add
+            without photo” for cash payments with no receipt.
           </p>
         </div>
       )}
@@ -419,14 +405,19 @@ export default function NewReceiptPage() {
 
       {stage === "verify" && (
         <div className="space-y-4 pb-8">
-          {previewUrl && (
+          {previewUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={previewUrl}
               alt="Receipt"
               className="max-h-48 w-full rounded-2xl object-contain ring-1 ring-slate-200"
             />
-          )}
+          ) : manual ? (
+            <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-500 ring-1 ring-slate-100">
+              No photo — enter the details below. Use Notes to record what the
+              payment was for (e.g. “Paid Joe Smith — dayworker — deck wash”).
+            </p>
+          ) : null}
 
           {lowConfidence && (
             <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -439,7 +430,6 @@ export default function NewReceiptPage() {
             onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
             onVendorBlur={autofillDepartment}
             departments={departments}
-            clients={clients}
           />
 
           <button

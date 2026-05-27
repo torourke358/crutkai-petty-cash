@@ -7,7 +7,7 @@ import ReceiptFormFields, {
   type ReceiptFormValues,
 } from "@/components/ReceiptFormFields";
 import { formatDate } from "@/lib/format";
-import type { Department, Client, Receipt } from "@/lib/types";
+import type { Department, Receipt } from "@/lib/types";
 
 export interface AuditEntry {
   id: string;
@@ -20,7 +20,6 @@ export interface AuditEntry {
 export default function ReceiptDetail({
   receipt,
   departments,
-  clients,
   imageUrl,
   isAdmin,
   uploaderName,
@@ -28,7 +27,6 @@ export default function ReceiptDetail({
 }: {
   receipt: Receipt;
   departments: Department[];
-  clients: Client[];
   imageUrl: string | null;
   isAdmin: boolean;
   uploaderName: string;
@@ -43,7 +41,6 @@ export default function ReceiptDetail({
       receipt.amount_total != null ? String(receipt.amount_total) : "",
     currency: receipt.currency ?? "USD",
     department_id: receipt.department_id ?? "",
-    client_id: receipt.client_id ?? "",
     notes: receipt.notes ?? "",
   });
   const [saving, setSaving] = useState(false);
@@ -54,10 +51,6 @@ export default function ReceiptDetail({
   async function save() {
     if (!values.department_id) {
       setError("Please choose a department.");
-      return;
-    }
-    if (!values.client_id) {
-      setError("Please choose a client to bill to.");
       return;
     }
     setSaving(true);
@@ -73,7 +66,6 @@ export default function ReceiptDetail({
         amount_total: values.amount_total ? Number(values.amount_total) : null,
         currency: values.currency,
         department_id: values.department_id,
-        client_id: values.client_id,
         notes: values.notes || null,
       }),
     });
@@ -113,13 +105,17 @@ export default function ReceiptDetail({
         </Link>
       </div>
 
-      {imageUrl && (
+      {imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={imageUrl}
           alt="Receipt"
           className="w-full rounded-2xl ring-1 ring-slate-200"
         />
+      ) : (
+        <div className="rounded-2xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-400 ring-1 ring-slate-100">
+          Manual entry — no receipt attached.
+        </div>
       )}
 
       <p className="text-sm text-slate-500">
@@ -142,7 +138,6 @@ export default function ReceiptDetail({
         values={values}
         onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
         departments={departments}
-        clients={clients}
       />
 
       <button

@@ -33,12 +33,11 @@ export default function ExportForm({
     });
   }
 
-  function download(format: "xlsx" | "csv") {
+  function download() {
     const params = new URLSearchParams();
     if (from) params.set("from", from);
     if (to) params.set("to", to);
     if (selected.size > 0) params.set("departments", [...selected].join(","));
-    params.set("format", format);
     // Navigating to the route triggers the file download (Content-Disposition).
     window.location.href = `/api/export?${params.toString()}`;
   }
@@ -52,7 +51,7 @@ export default function ExportForm({
         </Link>
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row">
         <div className="min-w-0 flex-1">
           <label htmlFor="from" className="block text-sm font-medium text-slate-700">
             From
@@ -104,20 +103,12 @@ export default function ExportForm({
         </div>
       </div>
 
-      <div className="space-y-2">
-        <button
-          onClick={() => download("xlsx")}
-          className="flex w-full items-center justify-center rounded-xl bg-violet-600 px-4 py-4 text-base font-medium text-white active:bg-violet-700"
-        >
-          Download Excel (.xlsx)
-        </button>
-        <button
-          onClick={() => download("csv")}
-          className="flex w-full items-center justify-center rounded-xl bg-white px-4 py-3 text-base font-medium text-slate-700 ring-1 ring-slate-200"
-        >
-          Download CSV
-        </button>
-      </div>
+      <button
+        onClick={download}
+        className="flex w-full items-center justify-center rounded-xl bg-violet-600 px-4 py-4 text-base font-medium text-white active:bg-violet-700"
+      >
+        Download Excel (.xlsx)
+      </button>
     </div>
   );
 }

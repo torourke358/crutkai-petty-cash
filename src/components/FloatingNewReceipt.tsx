@@ -7,7 +7,10 @@ import { usePathname } from "next/navigation";
 // except the new-receipt page itself (where it would be redundant).
 export default function FloatingNewReceipt() {
   const pathname = usePathname();
+  // Hide on the new-receipt screen (redundant) and on any admin page, where
+  // the button has no purpose and would overlap the page's primary action.
   if (pathname === "/receipts/new") return null;
+  if (pathname?.startsWith("/admin/")) return null;
 
   return (
     <Link

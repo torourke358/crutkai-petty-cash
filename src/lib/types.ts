@@ -33,7 +33,7 @@ export interface LineItem {
 export interface Receipt {
   id: string;
   user_id: string;
-  image_path: string;
+  image_path: string | null;
   vendor: string | null;
   receipt_date: string | null;
   amount_total: number | null;

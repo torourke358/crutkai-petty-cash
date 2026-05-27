@@ -5,7 +5,7 @@ const STYLES: Record<string, string> = {
   exterior: "bg-sky-100 text-sky-800",
   fnb: "bg-amber-100 text-amber-800",
   engineering: "bg-rose-100 text-rose-800",
-  bridge: "bg-emerald-100 text-emerald-800",
+  tips: "bg-emerald-100 text-emerald-800",
 };
 
 export function departmentBadgeClass(code: string | undefined | null): string {

@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { Department, Client } from "@/lib/types";
+import type { Department } from "@/lib/types";
 import { departmentBadgeClass } from "@/lib/departments";
 import { formatAmount, formatDate } from "@/lib/format";
 
@@ -13,37 +13,49 @@ export interface ReceiptCard {
   amount_total: number | null;
   currency: string;
   receipt_date: string | null;
+  notes: string | null;
   departmentId: string | null;
   departmentCode: string | null;
   departmentName: string | null;
   thumbnailUrl: string | null;
+  hasImage: boolean;
   uploaderName: string | null;
 }
 
 export default function ReceiptsList({
   cards,
   departments,
-  clients,
   isAdmin,
 }: {
   cards: ReceiptCard[];
   departments: Department[];
-  clients: Client[];
   isAdmin: boolean;
 }) {
   const router = useRouter();
   const [filter, setFilter] = useState<string | "all">("all");
+  const [search, setSearch] = useState("");
+  const [debounced, setDebounced] = useState("");
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [reassignTo, setReassignTo] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const visible = useMemo(
-    () =>
-      filter === "all" ? cards : cards.filter((c) => c.departmentId === filter),
-    [cards, filter],
-  );
+  // 300ms debounce on the search box.
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(search.trim().toLowerCase()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const visible = useMemo(() => {
+    return cards.filter((c) => {
+      if (filter !== "all" && c.departmentId !== filter) return false;
+      if (debounced) {
+        const hay = `${c.vendor ?? ""} ${c.notes ?? ""}`.toLowerCase();
+        if (!hay.includes(debounced)) return false;
+      }
+      return true;
+    });
+  }, [cards, filter, debounced]);
 
   const chips = [{ id: "all" as const, name: "All" }, ...departments];
 
@@ -59,55 +71,30 @@ export default function ReceiptsList({
   function exitSelect() {
     setSelectMode(false);
     setSelected(new Set());
-    setReassignTo("");
     setError(null);
-  }
-
-  // Run a request for each selected id; reuses the per-receipt API (which also
-  // writes audit-log entries). Fine for the modest volumes here.
-  async function runBulk(
-    fn: (id: string) => Promise<Response>,
-    failMsg: string,
-  ) {
-    setBusy(true);
-    setError(null);
-    const ids = [...selected];
-    const results = await Promise.all(ids.map((id) => fn(id).catch(() => null)));
-    setBusy(false);
-
-    const failed = results.filter((r) => !r || !r.ok).length;
-    if (failed > 0) {
-      setError(`${failMsg} (${failed} of ${ids.length} failed)`);
-      return;
-    }
-    exitSelect();
-    router.refresh();
-  }
-
-  function reassign() {
-    if (!reassignTo) {
-      setError("Choose a client to reassign to.");
-      return;
-    }
-    runBulk(
-      (id) =>
-        fetch(`/api/receipts/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ client_id: reassignTo }),
-        }),
-      "Some receipts couldn't be reassigned",
-    );
   }
 
   function remove() {
     if (!confirm(`Delete ${selected.size} receipt(s)? This can't be undone.`)) {
       return;
     }
-    runBulk(
-      (id) => fetch(`/api/receipts/${id}`, { method: "DELETE" }),
-      "Some receipts couldn't be deleted",
-    );
+    setBusy(true);
+    setError(null);
+    const ids = [...selected];
+    Promise.all(
+      ids.map((id) =>
+        fetch(`/api/receipts/${id}`, { method: "DELETE" }).catch(() => null),
+      ),
+    ).then((results) => {
+      setBusy(false);
+      const failed = results.filter((r) => !r || !r.ok).length;
+      if (failed > 0) {
+        setError(`Some receipts couldn't be deleted (${failed} of ${ids.length})`);
+        return;
+      }
+      exitSelect();
+      router.refresh();
+    });
   }
 
   return (
@@ -124,6 +111,26 @@ export default function ReceiptsList({
         <p className="absolute bottom-3 left-4 text-lg font-semibold text-white drop-shadow">
           Anne Marie
         </p>
+      </div>
+
+      {/* Search */}
+      <div className="relative mb-3">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search vendor or notes..."
+          className="block w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 pr-9 text-base text-slate-900 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
+        />
+        {search && (
+          <button
+            onClick={() => setSearch("")}
+            aria-label="Clear search"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md px-2 text-lg leading-none text-slate-400 hover:text-slate-700"
+          >
+            ×
+          </button>
+        )}
       </div>
 
       {/* Toolbar: filter chips + select toggle */}
@@ -156,34 +163,13 @@ export default function ReceiptsList({
         )}
       </div>
 
-      {/* Bulk action bar */}
+      {/* Bulk action bar (delete only) */}
       {selectMode && (
         <div className="sticky top-16 z-10 mb-3 space-y-2 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200">
           <p className="text-sm font-medium text-slate-700">
             {selected.size} selected
           </p>
-          <div className="flex gap-2">
-            <select
-              value={reassignTo}
-              onChange={(e) => setReassignTo(e.target.value)}
-              className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
-            >
-              <option value="">Reassign to client…</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={reassign}
-              disabled={busy || selected.size === 0 || !reassignTo}
-              className="shrink-0 rounded-xl bg-violet-600 px-4 py-2 text-sm font-medium text-white active:bg-violet-700 disabled:opacity-50"
-            >
-              Reassign
-            </button>
-          </div>
-          {isAdmin && (
+          {isAdmin ? (
             <button
               onClick={remove}
               disabled={busy || selected.size === 0}
@@ -191,6 +177,10 @@ export default function ReceiptsList({
             >
               Delete selected
             </button>
+          ) : (
+            <p className="text-sm text-slate-400">
+              Select receipts to manage them.
+            </p>
           )}
           {error && <p className="text-sm text-rose-600">{error}</p>}
         </div>
@@ -198,8 +188,12 @@ export default function ReceiptsList({
 
       {/* Cards */}
       {visible.length === 0 ? (
-        <div className="mt-24 text-center text-slate-400">
-          <p>No receipts yet. Tap the + to add your first.</p>
+        <div className="mt-16 text-center text-slate-400">
+          <p>
+            {debounced || filter !== "all"
+              ? "No receipts match."
+              : "No receipts yet. Tap the + to add your first."}
+          </p>
         </div>
       ) : (
         <ul className="space-y-3 pb-24">
@@ -218,7 +212,7 @@ export default function ReceiptsList({
                     ✓
                   </span>
                 )}
-                <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg bg-slate-100">
+                <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100">
                   {c.thumbnailUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -226,7 +220,11 @@ export default function ReceiptsList({
                       alt=""
                       className="h-full w-full object-cover"
                     />
-                  ) : null}
+                  ) : (
+                    <span className="px-1 text-center text-[10px] font-medium leading-tight text-slate-400">
+                      No photo
+                    </span>
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold text-slate-900">

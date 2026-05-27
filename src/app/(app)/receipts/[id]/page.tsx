@@ -4,7 +4,7 @@ import { getUserRole } from "@/lib/auth";
 import ReceiptDetail, {
   type AuditEntry,
 } from "@/components/ReceiptDetail";
-import type { Department, Client, Receipt } from "@/lib/types";
+import type { Department, Receipt } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -24,25 +24,19 @@ export default async function ReceiptDetailPage({
     .single<Receipt>();
   if (!receipt) notFound();
 
-  const [{ data: departments }, { data: clients }, { data: signed }] =
-    await Promise.all([
-      supabase
-        .from("departments")
-        .select("id, code, name, display_order, active")
-        .eq("active", true)
-        .order("display_order")
-        .returns<Department[]>(),
-      supabase
-        .from("clients")
-        .select("id, name, is_overhead, active, display_order")
-        .eq("active", true)
-        .order("display_order")
-        .order("name")
-        .returns<Client[]>(),
-      supabase.storage
-        .from("receipts")
-        .createSignedUrl(receipt.image_path, 300),
-    ]);
+  const [{ data: departments }, signedResult] = await Promise.all([
+    supabase
+      .from("departments")
+      .select("id, code, name, display_order, active")
+      .eq("active", true)
+      .order("display_order")
+      .returns<Department[]>(),
+    // Manual entries have no image_path, so only sign when one exists.
+    receipt.image_path
+      ? supabase.storage.from("receipts").createSignedUrl(receipt.image_path, 300)
+      : Promise.resolve({ data: null }),
+  ]);
+  const signed = signedResult.data;
 
   // Who uploaded this receipt (shown to everyone on the detail screen).
   const { data: uploader } = await supabase
@@ -87,7 +81,6 @@ export default async function ReceiptDetailPage({
     <ReceiptDetail
       receipt={receipt}
       departments={departments ?? []}
-      clients={clients ?? []}
       imageUrl={signed?.signedUrl ?? null}
       isAdmin={role === "admin"}
       uploaderName={uploaderName}
