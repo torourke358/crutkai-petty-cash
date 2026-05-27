@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
-import { EXTRACTION_PROMPT } from "@/lib/extraction-prompt";
+import { buildExtractionPrompt } from "@/lib/extraction-prompt";
 
 const MODEL = "claude-sonnet-4-6";
 
@@ -15,7 +15,7 @@ function stripFences(text: string): string {
 
 type ImageBlock = Anthropic.ImageBlockParam;
 
-async function callClaude(imageSource: ImageBlock["source"]) {
+async function callClaude(imageSource: ImageBlock["source"], prompt: string) {
   const anthropic = new Anthropic({
     apiKey: (process.env.ANTHROPIC_API_KEY ?? "").replace(/\s/g, ""),
   });
@@ -27,7 +27,7 @@ async function callClaude(imageSource: ImageBlock["source"]) {
         role: "user",
         content: [
           { type: "image", source: imageSource },
-          { type: "text", text: EXTRACTION_PROMPT },
+          { type: "text", text: prompt },
         ],
       },
     ],
@@ -54,10 +54,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
 
+  // Load the admin-editable notes guidance (falls back to the default).
+  const { data: setting } = await supabase
+    .from("app_settings")
+    .select("value")
+    .eq("key", "notes_instruction")
+    .maybeSingle();
+  const prompt = buildExtractionPrompt(setting?.value);
+
   let message;
   try {
     // Prefer passing the URL directly.
-    message = await callClaude({ type: "url", url: imageUrl });
+    message = await callClaude({ type: "url", url: imageUrl }, prompt);
   } catch {
     // Fall back to fetching + base64 (e.g. signed URL Anthropic can't reach).
     try {
@@ -65,11 +73,14 @@ export async function POST(request: Request) {
       const buf = Buffer.from(await res.arrayBuffer());
       const mediaType = (res.headers.get("content-type") ??
         "image/jpeg") as "image/jpeg" | "image/png" | "image/webp" | "image/gif";
-      message = await callClaude({
-        type: "base64",
-        media_type: mediaType,
-        data: buf.toString("base64"),
-      });
+      message = await callClaude(
+        {
+          type: "base64",
+          media_type: mediaType,
+          data: buf.toString("base64"),
+        },
+        prompt,
+      );
     } catch (err) {
       console.error("extract: anthropic call failed", err);
       return NextResponse.json(

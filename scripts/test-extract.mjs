@@ -12,7 +12,7 @@ const EXTRACTION_PROMPT = `You are reading a receipt photo for a yacht's petty c
   "currency": "ISO 4217 code, default USD if not indicated",
   "line_items": [{"description": "string", "amount": number}] — empty array if unclear,
   "confidence": "high | medium | low — your overall confidence in the extraction",
-  "notes": "string — anything unusual, e.g. handwritten, partially obscured, foreign language"
+  "notes": "A brief, plain-language description of what the expense was for — the goods or services purchased (for example: groceries and bottled water for the galley; diesel fuel; hardware and rigging supplies). For restaurant or bar receipts, give the establishment name, its location, and the tip amount if shown. Summarize the category of what was bought rather than the payment method or card number."
 }
 
 Return only the JSON. No prose, no markdown fences.

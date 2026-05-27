@@ -25,7 +25,7 @@ export default async function AppLayout({
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="safe-top sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-2xl items-center justify-between px-4 py-3">
+        <div className="mx-auto flex w-full max-w-2xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3">
           <Link
             href="/receipts"
             className="flex items-center gap-2 font-semibold text-slate-900"
@@ -46,9 +46,15 @@ export default async function AppLayout({
                 </Link>
                 <Link
                   href="/admin/clients"
-                  className="hidden text-sm font-medium text-slate-500 hover:text-violet-700 sm:inline"
+                  className="text-sm font-medium text-slate-500 hover:text-violet-700"
                 >
                   Clients
+                </Link>
+                <Link
+                  href="/admin/ai-notes"
+                  className="text-sm font-medium text-slate-500 hover:text-violet-700"
+                >
+                  AI notes
                 </Link>
                 <Link
                   href="/admin/export"
