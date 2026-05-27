@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getUserRole } from "@/lib/auth";
 import SignOutButton from "@/components/SignOutButton";
+import FloatingNewReceipt from "@/components/FloatingNewReceipt";
 
 // Protected shell for every signed-in screen. Server component: redirects to
 // /login when there's no session (the proxy does this too, but this guards
@@ -62,9 +63,11 @@ export default async function AppLayout({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-5">
+      <main className="mx-auto w-full max-w-2xl flex-1 px-4 pb-28 pt-5">
         {children}
       </main>
+
+      <FloatingNewReceipt />
     </div>
   );
 }

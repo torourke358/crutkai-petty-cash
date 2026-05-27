@@ -114,15 +114,8 @@ export default function ReceiptsList({
           ))}
         </ul>
       )}
-
-      {/* Floating action button */}
-      <Link
-        href="/receipts/new"
-        className="safe-bottom fixed bottom-6 right-6 flex h-14 items-center gap-2 rounded-full bg-violet-600 px-6 text-base font-medium text-white shadow-lg shadow-violet-300/50 active:bg-violet-700"
-      >
-        <span className="text-xl leading-none">+</span>
-        New receipt
-      </Link>
+      {/* The "+ New receipt" button now lives in the app layout (shown on
+          every screen), so it is no longer rendered here. */}
     </div>
   );
 }
