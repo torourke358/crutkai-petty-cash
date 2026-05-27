@@ -112,6 +112,20 @@ export default function ReceiptsList({
 
   return (
     <div className="relative">
+      {/* Vessel banner. Fixed height + object-cover so there's no layout shift. */}
+      <div className="relative mb-4 h-40 overflow-hidden rounded-2xl bg-slate-200">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/vessel.png"
+          alt="Anne Marie"
+          className="h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/55 to-transparent" />
+        <p className="absolute bottom-3 left-4 text-lg font-semibold text-white drop-shadow">
+          Anne Marie
+        </p>
+      </div>
+
       {/* Toolbar: filter chips + select toggle */}
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="-ml-1 flex flex-1 gap-2 overflow-x-auto px-1 pb-1">

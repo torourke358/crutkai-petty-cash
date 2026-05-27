@@ -31,9 +31,12 @@ export default async function AppLayout({
             href="/receipts"
             className="flex items-center gap-2 font-semibold text-slate-900"
           >
-            <span className="grid h-7 w-7 place-items-center rounded-lg bg-violet-600 text-sm font-bold text-white">
-              $
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/icons/icon-192.png"
+              alt=""
+              className="h-8 w-8 rounded-lg object-cover"
+            />
             Petty cash
           </Link>
           <div className="flex items-center gap-4">
