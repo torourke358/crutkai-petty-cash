@@ -8,7 +8,7 @@ import { prepareImage } from "@/lib/image";
 import ReceiptFormFields, {
   type ReceiptFormValues,
 } from "@/components/ReceiptFormFields";
-import type { Department, Confidence } from "@/lib/types";
+import type { Department, Client, Confidence } from "@/lib/types";
 
 type Stage = "capture" | "preview" | "reading" | "verify";
 
@@ -18,6 +18,7 @@ const emptyValues: ReceiptFormValues = {
   amount_total: "",
   currency: "USD",
   department_id: "",
+  client_id: "",
   notes: "",
 };
 
@@ -27,6 +28,8 @@ export default function NewReceiptPage() {
 
   const [stage, setStage] = useState<Stage>("capture");
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [lastClientId, setLastClientId] = useState<string>("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [blob, setBlob] = useState<Blob | null>(null);
   const [imagePath, setImagePath] = useState<string | null>(null);
@@ -46,8 +49,51 @@ export default function NewReceiptPage() {
       .eq("active", true)
       .order("display_order")
       .then(({ data }) => setDepartments((data as Department[]) ?? []));
+
+    supabase
+      .from("clients")
+      .select("id, name, is_overhead, active, display_order")
+      .eq("active", true)
+      .order("display_order")
+      .order("name")
+      .then(({ data }) => setClients((data as Client[]) ?? []));
+
+    // Default the client to the one this user used most recently (charters
+    // run for a while, so the last client is usually the right one).
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      supabase
+        .from("receipts")
+        .select("client_id")
+        .eq("user_id", user.id)
+        .not("client_id", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .then(({ data }) => {
+          const id = (data?.[0]?.client_id as string) ?? "";
+          if (id) {
+            setLastClientId(id);
+            setValues((v) => ({ ...v, client_id: v.client_id || id }));
+          }
+        });
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-code the department from the vendor's history (shared across crew).
+  async function autofillDepartment(vendor: string) {
+    const v = vendor.trim();
+    if (!v) return;
+    const { data } = await supabase.rpc("vendor_default_department", {
+      p_vendor: v,
+    });
+    if (data) {
+      // Only fill if the user hasn't already picked a department.
+      setValues((cur) =>
+        cur.department_id ? cur : { ...cur, department_id: data as string },
+      );
+    }
+  }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -112,9 +158,11 @@ export default function NewReceiptPage() {
       );
     }
 
+    const vendor = (extracted.vendor as string) ?? "";
+
     setImagePath(path);
-    setValues({
-      vendor: (extracted.vendor as string) ?? "",
+    setValues((v) => ({
+      vendor,
       receipt_date:
         (extracted.receipt_date as string) ||
         new Date().toISOString().slice(0, 10),
@@ -122,17 +170,25 @@ export default function NewReceiptPage() {
         extracted.amount_total != null ? String(extracted.amount_total) : "",
       currency: (extracted.currency as string) || "USD",
       department_id: "",
+      client_id: v.client_id || lastClientId,
       notes: (extracted.notes as string) ?? "",
-    });
+    }));
     setConfidence((extracted.confidence as Confidence) ?? null);
     setAiExtraction(extracted.ai_extraction ?? extracted);
     setStage("verify");
+
+    // Pre-fill the department from this vendor's coding history.
+    if (vendor) autofillDepartment(vendor);
   }
 
   async function save() {
     if (!imagePath) return;
     if (!values.department_id) {
       setError("Please choose a department.");
+      return;
+    }
+    if (!values.client_id) {
+      setError("Please choose a client to bill to.");
       return;
     }
     setSaving(true);
@@ -148,6 +204,7 @@ export default function NewReceiptPage() {
         amount_total: values.amount_total ? Number(values.amount_total) : null,
         currency: values.currency,
         department_id: values.department_id,
+        client_id: values.client_id,
         notes: values.notes || null,
         ai_extraction: aiExtraction,
         ai_confidence: confidence,
@@ -176,7 +233,7 @@ export default function NewReceiptPage() {
       </div>
 
       {error && (
-        <p className="mb-4 rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        <p className="mb-4 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
           {error}
         </p>
       )}
@@ -202,13 +259,13 @@ export default function NewReceiptPage() {
         <div className="space-y-3">
           <button
             onClick={() => cameraRef.current?.click()}
-            className="flex w-full items-center justify-center rounded-lg bg-slate-900 px-4 py-4 text-base font-medium text-white active:bg-slate-800"
+            className="flex w-full items-center justify-center rounded-xl bg-violet-600 px-4 py-4 text-base font-medium text-white active:bg-violet-700"
           >
             Take photo
           </button>
           <button
             onClick={() => libraryRef.current?.click()}
-            className="flex w-full items-center justify-center rounded-lg bg-white px-4 py-4 text-base font-medium text-slate-700 ring-1 ring-slate-200"
+            className="flex w-full items-center justify-center rounded-xl bg-white px-4 py-4 text-base font-medium text-slate-700 ring-1 ring-slate-200"
           >
             Choose from library
           </button>
@@ -221,12 +278,12 @@ export default function NewReceiptPage() {
           <img
             src={previewUrl}
             alt="Receipt preview"
-            className="w-full rounded-xl ring-1 ring-slate-200"
+            className="w-full rounded-2xl ring-1 ring-slate-200"
           />
           <button
             onClick={readReceipt}
             disabled={stage === "reading"}
-            className="flex w-full items-center justify-center rounded-lg bg-slate-900 px-4 py-4 text-base font-medium text-white active:bg-slate-800 disabled:opacity-60"
+            className="flex w-full items-center justify-center rounded-xl bg-violet-600 px-4 py-4 text-base font-medium text-white active:bg-violet-700 disabled:opacity-60"
           >
             {stage === "reading" ? "Reading receipt…" : "Read receipt"}
           </button>
@@ -251,12 +308,12 @@ export default function NewReceiptPage() {
             <img
               src={previewUrl}
               alt="Receipt"
-              className="max-h-48 w-full rounded-xl object-contain ring-1 ring-slate-200"
+              className="max-h-48 w-full rounded-2xl object-contain ring-1 ring-slate-200"
             />
           )}
 
           {lowConfidence && (
-            <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
               Double-check the amount and vendor.
             </p>
           )}
@@ -264,13 +321,15 @@ export default function NewReceiptPage() {
           <ReceiptFormFields
             values={values}
             onChange={(patch) => setValues((v) => ({ ...v, ...patch }))}
+            onVendorBlur={autofillDepartment}
             departments={departments}
+            clients={clients}
           />
 
           <button
             onClick={save}
             disabled={saving}
-            className="flex w-full items-center justify-center rounded-lg bg-slate-900 px-4 py-4 text-base font-medium text-white active:bg-slate-800 disabled:opacity-60"
+            className="flex w-full items-center justify-center rounded-xl bg-violet-600 px-4 py-4 text-base font-medium text-white active:bg-violet-700 disabled:opacity-60"
           >
             {saving ? "Saving…" : "Save receipt"}
           </button>

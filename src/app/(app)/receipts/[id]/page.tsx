@@ -4,7 +4,7 @@ import { getUserRole } from "@/lib/auth";
 import ReceiptDetail, {
   type AuditEntry,
 } from "@/components/ReceiptDetail";
-import type { Department, Receipt } from "@/lib/types";
+import type { Department, Client, Receipt } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -24,15 +24,33 @@ export default async function ReceiptDetailPage({
     .single<Receipt>();
   if (!receipt) notFound();
 
-  const [{ data: departments }, { data: signed }] = await Promise.all([
-    supabase
-      .from("departments")
-      .select("id, code, name, display_order, active")
-      .eq("active", true)
-      .order("display_order")
-      .returns<Department[]>(),
-    supabase.storage.from("receipts").createSignedUrl(receipt.image_path, 300),
-  ]);
+  const [{ data: departments }, { data: clients }, { data: signed }] =
+    await Promise.all([
+      supabase
+        .from("departments")
+        .select("id, code, name, display_order, active")
+        .eq("active", true)
+        .order("display_order")
+        .returns<Department[]>(),
+      supabase
+        .from("clients")
+        .select("id, name, is_overhead, active, display_order")
+        .eq("active", true)
+        .order("display_order")
+        .order("name")
+        .returns<Client[]>(),
+      supabase.storage
+        .from("receipts")
+        .createSignedUrl(receipt.image_path, 300),
+    ]);
+
+  // Who uploaded this receipt (shown to everyone on the detail screen).
+  const { data: uploader } = await supabase
+    .from("user_profiles")
+    .select("full_name")
+    .eq("id", receipt.user_id)
+    .single();
+  const uploaderName = uploader?.full_name ?? "Unknown";
 
   // Audit history is admin-only (RLS also blocks crew reads of audit_log).
   let audit: AuditEntry[] = [];
@@ -69,8 +87,10 @@ export default async function ReceiptDetailPage({
     <ReceiptDetail
       receipt={receipt}
       departments={departments ?? []}
+      clients={clients ?? []}
       imageUrl={signed?.signedUrl ?? null}
       isAdmin={role === "admin"}
+      uploaderName={uploaderName}
       audit={audit}
     />
   );

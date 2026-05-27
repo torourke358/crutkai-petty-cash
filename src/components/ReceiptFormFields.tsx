@@ -1,6 +1,6 @@
 "use client";
 
-import type { Department } from "@/lib/types";
+import type { Department, Client } from "@/lib/types";
 import { CURRENCIES } from "@/lib/types";
 
 export interface ReceiptFormValues {
@@ -9,22 +9,27 @@ export interface ReceiptFormValues {
   amount_total: string;
   currency: string;
   department_id: string;
+  client_id: string;
   notes: string;
 }
 
 const inputClass =
-  "mt-1 block w-full rounded-lg border border-slate-300 px-4 py-3 text-base text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900";
+  "mt-1 block w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base text-slate-900 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200";
 const labelClass = "block text-sm font-medium text-slate-700";
 
 // Shared, controlled field set used by both the new-receipt and detail forms.
 export default function ReceiptFormFields({
   values,
   onChange,
+  onVendorBlur,
   departments,
+  clients,
 }: {
   values: ReceiptFormValues;
   onChange: (patch: Partial<ReceiptFormValues>) => void;
+  onVendorBlur?: (vendor: string) => void;
   departments: Department[];
+  clients: Client[];
 }) {
   return (
     <div className="space-y-4">
@@ -37,6 +42,7 @@ export default function ReceiptFormFields({
           type="text"
           value={values.vendor}
           onChange={(e) => onChange({ vendor: e.target.value })}
+          onBlur={(e) => onVendorBlur?.(e.target.value)}
           className={inputClass}
         />
       </div>
@@ -105,6 +111,28 @@ export default function ReceiptFormFields({
           {departments.map((d) => (
             <option key={d.id} value={d.id}>
               {d.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label htmlFor="client_id" className={labelClass}>
+          Bill to (client)
+        </label>
+        <select
+          id="client_id"
+          required
+          value={values.client_id}
+          onChange={(e) => onChange({ client_id: e.target.value })}
+          className={inputClass}
+        >
+          <option value="" disabled>
+            Choose a client
+          </option>
+          {clients.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
             </option>
           ))}
         </select>

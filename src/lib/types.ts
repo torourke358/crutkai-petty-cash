@@ -17,6 +17,14 @@ export interface Department {
   active: boolean;
 }
 
+export interface Client {
+  id: string;
+  name: string;
+  is_overhead: boolean;
+  active: boolean;
+  display_order: number;
+}
+
 export interface LineItem {
   description: string;
   amount: number;
@@ -32,6 +40,7 @@ export interface Receipt {
   currency: string;
   department_id: string | null;
   notes: string | null;
+  client_id: string | null;
   line_items: LineItem[] | null;
   ai_extraction: unknown;
   ai_confidence: Confidence | null;

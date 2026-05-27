@@ -16,6 +16,7 @@ export interface ReceiptCard {
   departmentCode: string | null;
   departmentName: string | null;
   thumbnailUrl: string | null;
+  uploaderName: string | null;
 }
 
 export default function ReceiptsList({
@@ -50,7 +51,7 @@ export default function ReceiptsList({
               onClick={() => setFilter(chip.id)}
               className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors ${
                 active
-                  ? "bg-slate-900 text-white"
+                  ? "bg-violet-600 text-white"
                   : "bg-white text-slate-600 ring-1 ring-slate-200"
               }`}
             >
@@ -71,7 +72,7 @@ export default function ReceiptsList({
             <li key={c.id}>
               <Link
                 href={`/receipts/${c.id}`}
-                className="flex items-center gap-3 rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 active:bg-slate-50"
+                className="flex items-center gap-3 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-100 active:bg-slate-50"
               >
                 <div className="h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg bg-slate-100">
                   {c.thumbnailUrl ? (
@@ -89,6 +90,9 @@ export default function ReceiptsList({
                   </p>
                   <p className="text-sm text-slate-500">
                     {formatDate(c.receipt_date)}
+                    {c.uploaderName && (
+                      <span className="text-slate-400"> · {c.uploaderName}</span>
+                    )}
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-1">
@@ -114,7 +118,7 @@ export default function ReceiptsList({
       {/* Floating action button */}
       <Link
         href="/receipts/new"
-        className="safe-bottom fixed bottom-6 right-6 flex h-14 items-center gap-2 rounded-full bg-slate-900 px-6 text-base font-medium text-white shadow-lg active:bg-slate-800"
+        className="safe-bottom fixed bottom-6 right-6 flex h-14 items-center gap-2 rounded-full bg-violet-600 px-6 text-base font-medium text-white shadow-lg shadow-violet-300/50 active:bg-violet-700"
       >
         <span className="text-xl leading-none">+</span>
         New receipt

@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 
 interface ReceiptRow {
   id: string;
+  user_id: string;
   vendor: string | null;
   amount_total: number | null;
   currency: string;
@@ -26,7 +27,7 @@ export default async function ReceiptsPage() {
     supabase
       .from("receipts")
       .select(
-        "id, vendor, amount_total, currency, receipt_date, image_path, department_id, department:departments(code, name)",
+        "id, user_id, vendor, amount_total, currency, receipt_date, image_path, department_id, department:departments(code, name)",
       )
       .order("created_at", { ascending: false })
       .limit(30)
@@ -53,6 +54,22 @@ export default async function ReceiptsPage() {
     signed.map((s) => [s.path ?? "", s.signedUrl] as const),
   );
 
+  // For admins, resolve uploader names so the list can show who submitted each.
+  const isAdmin = role === "admin";
+  let nameById = new Map<string, string | null>();
+  if (isAdmin) {
+    const userIds = [...new Set(rows.map((r) => r.user_id))];
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("user_profiles")
+        .select("id, full_name")
+        .in("id", userIds);
+      nameById = new Map(
+        (profiles ?? []).map((p) => [p.id, p.full_name] as const),
+      );
+    }
+  }
+
   const cards: ReceiptCard[] = rows.map((r) => ({
     id: r.id,
     vendor: r.vendor,
@@ -63,6 +80,7 @@ export default async function ReceiptsPage() {
     departmentCode: r.department?.code ?? null,
     departmentName: r.department?.name ?? null,
     thumbnailUrl: urlByPath.get(r.image_path) ?? null,
+    uploaderName: isAdmin ? (nameById.get(r.user_id) ?? "Unknown") : null,
   }));
 
   return (

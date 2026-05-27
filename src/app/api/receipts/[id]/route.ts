@@ -8,6 +8,7 @@ const patchSchema = z.object({
   amount_total: z.number().nullable().optional(),
   currency: z.string().optional(),
   department_id: z.string().uuid().optional(),
+  client_id: z.string().uuid().optional(),
   notes: z.string().nullable().optional(),
   status: z.enum(["submitted", "verified", "void"]).optional(),
 });
