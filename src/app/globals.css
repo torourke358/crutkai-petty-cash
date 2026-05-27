@@ -3,6 +3,8 @@
 :root {
   --background: #f8fafc;
   --foreground: #0f172a;
+  /* Keep form controls (date pickers, selects) light, not OS-dark. */
+  color-scheme: light;
 }
 
 @theme inline {
@@ -12,12 +14,42 @@
   --font-mono: var(--font-geist-mono);
 }
 
+html {
+  /* Stop the whole-page rubber-band / pull-to-refresh that screams "web page". */
+  overscroll-behavior-y: none;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
-  /* Avoid iOS auto-zoom on focus by keeping inputs >= 16px (set per-field). */
   -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: none;
+
+  /* App-like touch behavior:
+     - no blue tap flash
+     - no long-press callout / text-selection magnifier on chrome */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* But text the user legitimately edits or may want to copy stays selectable. */
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Remove the 300ms tap delay / double-tap zoom on interactive elements. */
+button,
+a,
+[role="button"],
+label,
+select {
+  touch-action: manipulation;
 }
 
 /* Respect the iPhone safe areas when installed to the home screen. */
@@ -26,4 +58,13 @@ body {
 }
 .safe-top {
   padding-top: env(safe-area-inset-top);
+}
+
+/* When launched from the home screen (standalone), lock the body so only
+   inner regions scroll — closer to a native app shell. */
+@media (display-mode: standalone) {
+  body {
+    /* Prevent accidental horizontal drift. */
+    overflow-x: hidden;
+  }
 }
