@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getUserRole } from "@/lib/auth";
 import SignOutButton from "@/components/SignOutButton";
 import FloatingNewReceipt from "@/components/FloatingNewReceipt";
+import InstallPrompt from "@/components/InstallPrompt";
 
 // Protected shell for every signed-in screen. Server component: redirects to
 // /login when there's no session (the proxy does this too, but this guards
@@ -70,6 +71,7 @@ export default async function AppLayout({
       </header>
 
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 pb-28 pt-5">
+        <InstallPrompt />
         {children}
       </main>
 
