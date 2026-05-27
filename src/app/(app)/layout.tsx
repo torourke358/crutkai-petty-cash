@@ -73,7 +73,12 @@ export default async function AppLayout({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-2xl flex-1 px-4 pb-28 pt-5">
+      <main
+        className="mx-auto w-full max-w-2xl flex-1 px-4 pt-5"
+        // Clear the floating button, which is lifted above the iPhone home
+        // indicator, so page buttons never sit underneath it.
+        style={{ paddingBottom: "calc(8rem + env(safe-area-inset-bottom))" }}
+      >
         <InstallPrompt />
         {children}
       </main>

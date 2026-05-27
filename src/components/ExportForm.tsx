@@ -53,7 +53,7 @@ export default function ExportForm({
       </div>
 
       <div className="flex gap-3">
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <label htmlFor="from" className="block text-sm font-medium text-slate-700">
             From
           </label>
@@ -65,7 +65,7 @@ export default function ExportForm({
             className={inputClass}
           />
         </div>
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <label htmlFor="to" className="block text-sm font-medium text-slate-700">
             To
           </label>
