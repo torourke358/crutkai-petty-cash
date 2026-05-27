@@ -366,7 +366,9 @@ export default function NewReceiptPage() {
             Choose from library
           </button>
           <p className="text-center text-xs text-slate-400">
-            Tip: in the library you can select several receipts at once.
+            Tip: select several receipts at once from the library. If a receipt
+            is already on a screen, upload the image or a screenshot instead of
+            photographing the monitor — it reads far more reliably.
           </p>
         </div>
       )}

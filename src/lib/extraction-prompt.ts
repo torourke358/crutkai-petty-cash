@@ -11,7 +11,9 @@ export function buildExtractionPrompt(notesInstruction?: string | null): string 
     .replace(/"/g, "'")
     .replace(/\s+/g, " ");
 
-  return `You are reading a receipt photo for a yacht's petty cash log. Extract the following as JSON:
+  return `You are reading an image for a yacht's petty cash log. It is usually a receipt, an invoice, or a handwritten expense note. The image may be a photo of paper, a screenshot, or a photo of a receipt shown on a computer or phone screen — screen photos can have glare, reflections, or moiré (wavy) patterns. Read it anyway and do your best to extract the details.
+
+Extract the following as JSON:
 
 {
   "vendor": "string — business or merchant name, null if unclear",
@@ -23,7 +25,7 @@ export function buildExtractionPrompt(notesInstruction?: string | null): string 
   "notes": "${notes}"
 }
 
-Return only the JSON. No prose, no markdown fences.
+Extract whatever you can read, even partially — set a field to null only when it is genuinely illegible, and lower the confidence accordingly. Return only the JSON. No prose, no markdown fences.
 
-If the image is not a receipt, return: {"error": "not_a_receipt"}`;
+Only return {"error": "not_a_receipt"} if the image clearly contains no receipt, invoice, or expense information at all (for example a random photo of a person or landscape).`;
 }
