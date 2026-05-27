@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getUserRole } from "@/lib/auth";
 import ReceiptsList, { type ReceiptCard } from "@/components/ReceiptsList";
-import type { Department } from "@/lib/types";
+import type { Department, Client } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -23,22 +23,30 @@ export default async function ReceiptsPage() {
 
   // RLS already scopes crew to their own rows and lets admins see all,
   // so we don't filter by user_id here.
-  const [{ data: receipts }, { data: departments }] = await Promise.all([
-    supabase
-      .from("receipts")
-      .select(
-        "id, user_id, vendor, amount_total, currency, receipt_date, image_path, department_id, department:departments(code, name)",
-      )
-      .order("created_at", { ascending: false })
-      .limit(30)
-      .returns<ReceiptRow[]>(),
-    supabase
-      .from("departments")
-      .select("id, code, name, display_order, active")
-      .eq("active", true)
-      .order("display_order")
-      .returns<Department[]>(),
-  ]);
+  const [{ data: receipts }, { data: departments }, { data: clients }] =
+    await Promise.all([
+      supabase
+        .from("receipts")
+        .select(
+          "id, user_id, vendor, amount_total, currency, receipt_date, image_path, department_id, department:departments(code, name)",
+        )
+        .order("created_at", { ascending: false })
+        .limit(30)
+        .returns<ReceiptRow[]>(),
+      supabase
+        .from("departments")
+        .select("id, code, name, display_order, active")
+        .eq("active", true)
+        .order("display_order")
+        .returns<Department[]>(),
+      supabase
+        .from("clients")
+        .select("id, name, is_overhead, active, display_order")
+        .eq("active", true)
+        .order("display_order")
+        .order("name")
+        .returns<Client[]>(),
+    ]);
 
   const rows = receipts ?? [];
 
@@ -87,6 +95,7 @@ export default async function ReceiptsPage() {
     <ReceiptsList
       cards={cards}
       departments={departments ?? []}
+      clients={clients ?? []}
       isAdmin={role === "admin"}
     />
   );
