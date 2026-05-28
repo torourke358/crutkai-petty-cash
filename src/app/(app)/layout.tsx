@@ -43,6 +43,12 @@ export default async function AppLayout({
             {role === "admin" && (
               <>
                 <Link
+                  href="/admin/dashboard"
+                  className="text-sm font-medium text-slate-500 hover:text-violet-700"
+                >
+                  Dashboard
+                </Link>
+                <Link
                   href="/admin/ai-notes"
                   className="text-sm font-medium text-slate-500 hover:text-violet-700"
                 >
