@@ -35,6 +35,10 @@ export default function ReceiptsList({
   const [filter, setFilter] = useState<string | "all">("all");
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
+  const [matchMode, setMatchMode] = useState<"all" | "any">("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [showDates, setShowDates] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -47,15 +51,46 @@ export default function ReceiptsList({
   }, [search]);
 
   const visible = useMemo(() => {
+    // Split the query into words; AND = every word, OR = any word.
+    const terms = debounced.split(/\s+/).filter(Boolean);
     return cards.filter((c) => {
       if (filter !== "all" && c.departmentId !== filter) return false;
-      if (debounced) {
+
+      // Date range (ISO date strings compare correctly as text).
+      if (fromDate || toDate) {
+        if (!c.receipt_date) return false;
+        if (fromDate && c.receipt_date < fromDate) return false;
+        if (toDate && c.receipt_date > toDate) return false;
+      }
+
+      if (terms.length > 0) {
         const hay = `${c.vendor ?? ""} ${c.notes ?? ""}`.toLowerCase();
-        if (!hay.includes(debounced)) return false;
+        const hit =
+          matchMode === "all"
+            ? terms.every((t) => hay.includes(t))
+            : terms.some((t) => hay.includes(t));
+        if (!hit) return false;
       }
       return true;
     });
-  }, [cards, filter, debounced]);
+  }, [cards, filter, debounced, matchMode, fromDate, toDate]);
+
+  // Running total of the matching receipts (answers "how much on X?").
+  const { total, currencyLabel } = useMemo(() => {
+    let sum = 0;
+    const currencies = new Set<string>();
+    for (const c of visible) {
+      sum += Number(c.amount_total ?? 0);
+      if (c.amount_total != null) currencies.add(c.currency);
+    }
+    return {
+      total: sum,
+      currencyLabel: currencies.size === 1 ? [...currencies][0] : "mixed",
+    };
+  }, [visible]);
+
+  const filtersActive =
+    !!debounced || filter !== "all" || !!fromDate || !!toDate;
 
   const chips = [{ id: "all" as const, name: "All" }, ...departments];
 
@@ -132,6 +167,98 @@ export default function ReceiptsList({
           </button>
         )}
       </div>
+
+      {/* Match mode (AND/OR) + date-range toggle */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-slate-500">Match</span>
+        <div className="inline-flex overflow-hidden rounded-lg ring-1 ring-slate-200">
+          <button
+            onClick={() => setMatchMode("all")}
+            className={`px-3 py-1.5 text-sm font-medium ${
+              matchMode === "all"
+                ? "bg-violet-600 text-white"
+                : "bg-white text-slate-600"
+            }`}
+          >
+            All words
+          </button>
+          <button
+            onClick={() => setMatchMode("any")}
+            className={`px-3 py-1.5 text-sm font-medium ${
+              matchMode === "any"
+                ? "bg-violet-600 text-white"
+                : "bg-white text-slate-600"
+            }`}
+          >
+            Any word
+          </button>
+        </div>
+        <button
+          onClick={() => setShowDates((s) => !s)}
+          className={`ml-auto rounded-lg px-3 py-1.5 text-sm font-medium ring-1 ring-slate-200 ${
+            fromDate || toDate ? "bg-violet-50 text-violet-700" : "bg-white text-slate-600"
+          }`}
+        >
+          Dates{fromDate || toDate ? " •" : ""}
+        </button>
+      </div>
+
+      {showDates && (
+        <div className="mb-3 flex flex-col gap-3 rounded-2xl bg-white p-3 ring-1 ring-slate-200 sm:flex-row">
+          <div className="min-w-0 flex-1">
+            <label htmlFor="from" className="block text-xs font-medium text-slate-500">
+              From
+            </label>
+            <input
+              id="from"
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
+            />
+          </div>
+          <div className="min-w-0 flex-1">
+            <label htmlFor="to" className="block text-xs font-medium text-slate-500">
+              To
+            </label>
+            <input
+              id="to"
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200"
+            />
+          </div>
+          {(fromDate || toDate) && (
+            <button
+              onClick={() => {
+                setFromDate("");
+                setToDate("");
+              }}
+              className="self-end text-sm font-medium text-slate-500 hover:text-slate-900"
+            >
+              Clear dates
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Live total of matching receipts */}
+      {filtersActive && (
+        <div className="mb-3 flex items-center justify-between rounded-xl bg-slate-900 px-4 py-2.5 text-sm text-white">
+          <span>
+            {visible.length} {visible.length === 1 ? "receipt" : "receipts"}
+          </span>
+          <span className="font-semibold tabular-nums">
+            {formatAmount(total, currencyLabel === "mixed" ? "" : currencyLabel)}
+            {currencyLabel === "mixed" && (
+              <span className="ml-1 text-xs font-normal text-slate-300">
+                mixed currencies
+              </span>
+            )}
+          </span>
+        </div>
+      )}
 
       {/* Toolbar: filter chips + select toggle */}
       <div className="mb-3 flex items-center justify-between gap-2">

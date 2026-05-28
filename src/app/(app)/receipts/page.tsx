@@ -30,8 +30,10 @@ export default async function ReceiptsPage() {
       .select(
         "id, user_id, vendor, amount_total, currency, receipt_date, image_path, notes, department_id, department:departments(code, name)",
       )
+      // Load a wide window so client-side search + date filtering can reach
+      // back across real history (e.g. searching February later in the year).
       .order("created_at", { ascending: false })
-      .limit(30)
+      .limit(500)
       .returns<ReceiptRow[]>(),
     supabase
       .from("departments")
