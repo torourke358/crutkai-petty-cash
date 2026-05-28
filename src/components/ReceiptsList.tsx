@@ -3,8 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { Category, Department } from "@/lib/types";
-import { CATEGORIES, CATEGORY_LABELS } from "@/lib/types";
+import type { Department } from "@/lib/types";
 import { departmentBadgeClass } from "@/lib/departments";
 import { formatAmount, formatDate } from "@/lib/format";
 
@@ -15,7 +14,6 @@ export interface ReceiptCard {
   currency: string;
   receipt_date: string | null;
   notes: string | null;
-  category: Category;
   departmentId: string | null;
   departmentCode: string | null;
   departmentName: string | null;
@@ -35,9 +33,6 @@ export default function ReceiptsList({
 }) {
   const router = useRouter();
   const [filter, setFilter] = useState<string | "all">("all");
-  const [categoryFilter, setCategoryFilter] = useState<Set<Category>>(
-    new Set(),
-  );
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [fromDate, setFromDate] = useState("");
@@ -56,16 +51,10 @@ export default function ReceiptsList({
 
   const visible = useMemo(() => {
     // Every typed word must match (case-insensitive substring across vendor +
-    // notes). To search across categories, tap chips instead.
+    // notes).
     const terms = debounced.split(/\s+/).filter(Boolean);
     return cards.filter((c) => {
       if (filter !== "all" && c.departmentId !== filter) return false;
-
-      // Category filter: empty set = show all; otherwise the receipt's
-      // category must be one of the selected chips.
-      if (categoryFilter.size > 0 && !categoryFilter.has(c.category)) {
-        return false;
-      }
 
       // Date range (ISO date strings compare correctly as text).
       if (fromDate || toDate) {
@@ -80,7 +69,7 @@ export default function ReceiptsList({
       }
       return true;
     });
-  }, [cards, filter, categoryFilter, debounced, fromDate, toDate]);
+  }, [cards, filter, debounced, fromDate, toDate]);
 
   // Running total of the matching receipts (answers "how much on X?").
   const { total, currencyLabel } = useMemo(() => {
@@ -97,22 +86,9 @@ export default function ReceiptsList({
   }, [visible]);
 
   const filtersActive =
-    !!debounced ||
-    filter !== "all" ||
-    categoryFilter.size > 0 ||
-    !!fromDate ||
-    !!toDate;
+    !!debounced || filter !== "all" || !!fromDate || !!toDate;
 
   const chips = [{ id: "all" as const, name: "All" }, ...departments];
-
-  function toggleCategory(c: Category) {
-    setCategoryFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(c)) next.delete(c);
-      else next.add(c);
-      return next;
-    });
-  }
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -260,7 +236,7 @@ export default function ReceiptsList({
       )}
 
       {/* Toolbar: department chips + select toggle */}
-      <div className="mb-2 flex items-center justify-between gap-2">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <div className="-ml-1 flex flex-1 gap-2 overflow-x-auto px-1 pb-1">
           {chips.map((chip) => {
             const active = filter === chip.id;
@@ -287,26 +263,6 @@ export default function ReceiptsList({
             {selectMode ? "Cancel" : "Select"}
           </button>
         )}
-      </div>
-
-      {/* Category chips (multi-select). Tap several to OR-combine. */}
-      <div className="mb-3 -ml-1 flex gap-2 overflow-x-auto px-1 pb-1">
-        {CATEGORIES.map((c) => {
-          const active = categoryFilter.has(c);
-          return (
-            <button
-              key={c}
-              onClick={() => toggleCategory(c)}
-              className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                active
-                  ? "bg-slate-900 text-white"
-                  : "bg-white text-slate-600 ring-1 ring-slate-200"
-              }`}
-            >
-              {CATEGORY_LABELS[c]}
-            </button>
-          );
-        })}
       </div>
 
       {/* Bulk action bar (delete only) */}

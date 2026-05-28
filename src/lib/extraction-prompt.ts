@@ -20,22 +20,12 @@ Extract the following as JSON:
   "receipt_date": "YYYY-MM-DD, null if unclear",
   "amount_total": number — the total amount paid, null if unclear,
   "currency": "ISO 4217 code, default USD if not indicated",
-  "category": "one of: restaurant | groceries | fuel | supplies | hardware | services | other",
   "line_items": [{"description": "string", "amount": number}] — empty array if unclear,
   "confidence": "high | medium | low — your overall confidence in the extraction",
   "notes": "${notes}"
 }
 
-Category guidance:
-- restaurant — meals/drinks out: restaurants, bars, cafes, food trucks
-- groceries — provisioning the galley: supermarkets, butchers, produce, bottled water
-- fuel — diesel, gasoline, marina fuel pumps
-- supplies — consumables: cleaning products, paper goods, foil, ziplocks, deck/galley supplies
-- hardware — durable parts and tools: fittings, rigging, marine hardware, ship's parts
-- services — dockage, repairs, laundry, contractors, transport, parking
-- other — anything that doesn't clearly fit one of the above
-
-Extract whatever you can read, even partially — set a field to null only when it is genuinely illegible, and lower the confidence accordingly. Always pick a category (use "other" if unsure). Return only the JSON. No prose, no markdown fences.
+Extract whatever you can read, even partially — set a field to null only when it is genuinely illegible, and lower the confidence accordingly. Return only the JSON. No prose, no markdown fences.
 
 Only return {"error": "not_a_receipt"} if the image clearly contains no receipt, invoice, or expense information at all (for example a random photo of a person or landscape).`;
 }

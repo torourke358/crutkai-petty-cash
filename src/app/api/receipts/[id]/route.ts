@@ -2,14 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit";
-import { CURRENCIES, CATEGORIES } from "@/lib/types";
+import { CURRENCIES } from "@/lib/types";
 
 const patchSchema = z.object({
   vendor: z.string().nullable().optional(),
   receipt_date: z.string().nullable().optional(),
   amount_total: z.number().nullable().optional(),
   currency: z.enum(CURRENCIES).optional(),
-  category: z.enum(CATEGORIES).optional(),
   department_id: z.string().uuid().optional(),
   // Accepted but ignored — clients feature is hidden (kept for v2).
   client_id: z.string().uuid().nullable().optional(),

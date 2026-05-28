@@ -40,7 +40,6 @@ export default function ReceiptDetail({
     amount_total:
       receipt.amount_total != null ? String(receipt.amount_total) : "",
     currency: receipt.currency ?? "USD",
-    category: receipt.category ?? "other",
     department_id: receipt.department_id ?? "",
     notes: receipt.notes ?? "",
   });
@@ -66,7 +65,6 @@ export default function ReceiptDetail({
         receipt_date: values.receipt_date || null,
         amount_total: values.amount_total ? Number(values.amount_total) : null,
         currency: values.currency,
-        category: values.category,
         department_id: values.department_id,
         notes: values.notes || null,
       }),

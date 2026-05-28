@@ -3,7 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit";
 import { todayLocal } from "@/lib/format";
-import { CURRENCIES, CATEGORIES } from "@/lib/types";
+import { CURRENCIES } from "@/lib/types";
 
 const bodySchema = z.object({
   // Null for manual entries (no photo). Photo flow always supplies a path.
@@ -12,7 +12,6 @@ const bodySchema = z.object({
   receipt_date: z.string().nullable().optional(),
   amount_total: z.number().nullable().optional(),
   currency: z.enum(CURRENCIES).default("USD"),
-  category: z.enum(CATEGORIES).default("other"),
   department_id: z.string().uuid(),
   // Accepted but ignored — the clients feature is hidden (kept for v2).
   client_id: z.string().uuid().nullable().optional(),
@@ -59,7 +58,6 @@ export async function POST(request: Request) {
       receipt_date: b.receipt_date || todayLocal(),
       amount_total: b.amount_total ?? null,
       currency: b.currency,
-      category: b.category,
       department_id: b.department_id,
       notes: b.notes ?? null,
       line_items: b.line_items ?? null,

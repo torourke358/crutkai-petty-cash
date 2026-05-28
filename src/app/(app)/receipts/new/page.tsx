@@ -9,8 +9,7 @@ import { todayLocal } from "@/lib/format";
 import ReceiptFormFields, {
   type ReceiptFormValues,
 } from "@/components/ReceiptFormFields";
-import type { Department, Confidence, Category } from "@/lib/types";
-import { CATEGORIES } from "@/lib/types";
+import type { Department, Confidence } from "@/lib/types";
 
 type Stage = "capture" | "preview" | "reading" | "verify";
 
@@ -19,7 +18,6 @@ const emptyValues: ReceiptFormValues = {
   receipt_date: todayLocal(),
   amount_total: "",
   currency: "USD",
-  category: "other",
   department_id: "",
   notes: "",
 };
@@ -213,13 +211,6 @@ export default function NewReceiptPage() {
     }
     const vendor = (extracted.vendor as string) ?? "";
 
-    const aiCategory = extracted.category as string | undefined;
-    const category: Category = (CATEGORIES as readonly string[]).includes(
-      aiCategory ?? "",
-    )
-      ? (aiCategory as Category)
-      : "other";
-
     setImagePath(path);
     setValues({
       vendor,
@@ -227,7 +218,6 @@ export default function NewReceiptPage() {
       amount_total:
         extracted.amount_total != null ? String(extracted.amount_total) : "",
       currency: (extracted.currency as string) || "USD",
-      category,
       department_id: "",
       notes: (extracted.notes as string) ?? "",
     });
@@ -277,7 +267,6 @@ export default function NewReceiptPage() {
         receipt_date: values.receipt_date || null,
         amount_total: values.amount_total ? Number(values.amount_total) : null,
         currency: values.currency,
-        category: values.category,
         department_id: values.department_id,
         notes: values.notes || null,
         ai_extraction: manual ? null : aiExtraction,

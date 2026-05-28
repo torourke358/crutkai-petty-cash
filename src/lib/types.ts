@@ -9,30 +9,6 @@ export type ReceiptStatus = "submitted" | "verified" | "void";
 export const CURRENCIES = ["USD", "EUR", "GBP", "CAD", "AUD"] as const;
 export type Currency = (typeof CURRENCIES)[number];
 
-// Categories let the receipts list filter by what was bought (e.g. all
-// restaurants, all supplies). The AI extraction assigns one; users can
-// override in the receipt form.
-export const CATEGORIES = [
-  "restaurant",
-  "groceries",
-  "fuel",
-  "supplies",
-  "hardware",
-  "services",
-  "other",
-] as const;
-export type Category = (typeof CATEGORIES)[number];
-
-export const CATEGORY_LABELS: Record<Category, string> = {
-  restaurant: "Restaurant",
-  groceries: "Groceries",
-  fuel: "Fuel",
-  supplies: "Supplies",
-  hardware: "Hardware",
-  services: "Services",
-  other: "Other",
-};
-
 export interface Department {
   id: string;
   code: string;
@@ -63,7 +39,6 @@ export interface Receipt {
   amount_total: number | null;
   currency: string;
   department_id: string | null;
-  category: Category;
   notes: string | null;
   client_id: string | null;
   line_items: LineItem[] | null;

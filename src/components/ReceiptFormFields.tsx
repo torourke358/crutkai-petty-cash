@@ -1,14 +1,13 @@
 "use client";
 
-import type { Category, Department } from "@/lib/types";
-import { CATEGORIES, CATEGORY_LABELS, CURRENCIES } from "@/lib/types";
+import type { Department } from "@/lib/types";
+import { CURRENCIES } from "@/lib/types";
 
 export interface ReceiptFormValues {
   vendor: string;
   receipt_date: string;
   amount_total: string;
   currency: string;
-  category: Category;
   department_id: string;
   notes: string;
 }
@@ -109,26 +108,6 @@ export default function ReceiptFormFields({
           {departments.map((d) => (
             <option key={d.id} value={d.id}>
               {d.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label htmlFor="category" className={labelClass}>
-          Category
-        </label>
-        <select
-          id="category"
-          value={values.category}
-          onChange={(e) =>
-            onChange({ category: e.target.value as Category })
-          }
-          className={inputClass}
-        >
-          {CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {CATEGORY_LABELS[c]}
             </option>
           ))}
         </select>
