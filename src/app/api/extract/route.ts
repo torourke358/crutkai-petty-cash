@@ -2,8 +2,17 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { buildExtractionPrompt } from "@/lib/extraction-prompt";
+import { CURRENCIES } from "@/lib/types";
 
 const MODEL = "claude-sonnet-4-6";
+
+const IMAGE_MEDIA_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+] as const;
+type ImageMediaType = (typeof IMAGE_MEDIA_TYPES)[number];
 
 // Strip ```json fences if the model adds them despite instructions.
 function stripFences(text: string): string {
@@ -44,15 +53,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  let imageUrl: string;
+  // Take a storage path (under the caller's folder) rather than a raw URL —
+  // signing happens server-side. Accepting an arbitrary URL would turn this
+  // route into a server-side fetch for anywhere on the internet.
+  let imagePath: string;
   try {
-    ({ imageUrl } = await request.json());
+    ({ image_path: imagePath } = await request.json());
   } catch {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
-  if (!imageUrl) {
+  if (!imagePath || typeof imagePath !== "string") {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
+  if (!imagePath.startsWith(`${user.id}/`)) {
+    return NextResponse.json({ error: "forbidden_path" }, { status: 403 });
+  }
+
+  const { data: signed, error: signErr } = await supabase.storage
+    .from("receipts")
+    .createSignedUrl(imagePath, 60);
+  if (signErr || !signed?.signedUrl) {
+    console.error("extract: sign failed", signErr);
+    return NextResponse.json({ error: "sign_failed" }, { status: 500 });
+  }
+  const imageUrl = signed.signedUrl;
 
   // Load the admin-editable notes guidance (falls back to the default).
   const { data: setting } = await supabase
@@ -70,9 +94,25 @@ export async function POST(request: Request) {
     // Fall back to fetching + base64 (e.g. signed URL Anthropic can't reach).
     try {
       const res = await fetch(imageUrl);
+      if (!res.ok) {
+        console.error("extract: refetch failed", res.status);
+        return NextResponse.json(
+          { error: "extraction_failed", raw: "" },
+          { status: 200 },
+        );
+      }
+      const ct = res.headers.get("content-type") ?? "";
+      const mediaType = IMAGE_MEDIA_TYPES.find((m) =>
+        ct.startsWith(m),
+      ) as ImageMediaType | undefined;
+      if (!mediaType) {
+        console.error("extract: refetch wrong content-type", ct);
+        return NextResponse.json(
+          { error: "extraction_failed", raw: "" },
+          { status: 200 },
+        );
+      }
       const buf = Buffer.from(await res.arrayBuffer());
-      const mediaType = (res.headers.get("content-type") ??
-        "image/jpeg") as "image/jpeg" | "image/png" | "image/webp" | "image/gif";
       message = await callClaude(
         {
           type: "base64",
@@ -108,11 +148,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "not_a_receipt" }, { status: 200 });
   }
 
+  // Clamp currency to the set the UI offers — the AI sometimes returns codes
+  // outside that list (e.g. CHF on a Swiss restaurant receipt), and storing
+  // them would either fail at the DB or silently bypass downstream filters.
+  const aiCurrency =
+    typeof parsed.currency === "string" ? parsed.currency : "";
+  const currency = (CURRENCIES as readonly string[]).includes(aiCurrency)
+    ? aiCurrency
+    : "USD";
+
   return NextResponse.json({
     vendor: parsed.vendor ?? null,
     receipt_date: parsed.receipt_date ?? null,
     amount_total: parsed.amount_total ?? null,
-    currency: parsed.currency ?? "USD",
+    currency,
     line_items: Array.isArray(parsed.line_items) ? parsed.line_items : [],
     confidence: parsed.confidence ?? "low",
     notes: parsed.notes ?? null,

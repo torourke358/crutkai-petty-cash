@@ -9,7 +9,10 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   // Run on everything except Next internals, static files, and image assets.
+  // Skip /api/* — those routes enforce their own auth and return 401 JSON.
+  // Letting the proxy redirect them to /login turns 401s into 200 HTML, which
+  // breaks client error handling (fetch follows the redirect, res.ok=true).
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|json)$).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|json)$).*)",
   ],
 };

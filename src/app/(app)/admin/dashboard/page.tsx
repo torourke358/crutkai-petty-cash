@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getUserRole } from "@/lib/auth";
+import { monthStartLocal, todayLocal } from "@/lib/format";
 import type { Department } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -16,13 +17,6 @@ interface Row {
   client: { name: string; is_overhead: boolean } | null;
 }
 
-function monthStart(): string {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
-}
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 function money(n: number): string {
   return new Intl.NumberFormat("en-US", {
     minimumFractionDigits: 2,
@@ -41,8 +35,8 @@ export default async function DashboardPage({
   if ((await getUserRole()) !== "admin") redirect("/receipts");
 
   const sp = await searchParams;
-  const from = sp.from || monthStart();
-  const to = sp.to || today();
+  const from = sp.from || monthStartLocal();
+  const to = sp.to || todayLocal();
 
   const supabase = await createClient();
 

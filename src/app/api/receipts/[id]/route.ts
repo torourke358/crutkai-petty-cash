@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
+import { writeAudit } from "@/lib/audit";
+import { CURRENCIES } from "@/lib/types";
 
 const patchSchema = z.object({
   vendor: z.string().nullable().optional(),
   receipt_date: z.string().nullable().optional(),
   amount_total: z.number().nullable().optional(),
-  currency: z.string().optional(),
+  currency: z.enum(CURRENCIES).optional(),
   department_id: z.string().uuid().optional(),
   // Accepted but ignored — clients feature is hidden (kept for v2).
   client_id: z.string().uuid().nullable().optional(),
@@ -52,20 +54,24 @@ export async function PATCH(request: Request, ctx: Ctx) {
     normalized.receipt_date = parsed.data.receipt_date || null;
   }
 
-  const { data: after, error } = await supabase
+  // Use {count: 'exact'} + maybeSingle so an RLS-blocked update surfaces as
+  // 403 instead of a generic 500 — and so the audit_log records the denial.
+  const { data: after, error, count } = await supabase
     .from("receipts")
-    .update(normalized)
+    .update(normalized, { count: "exact" })
     .eq("id", id)
     .select()
-    .single();
+    .maybeSingle();
 
-  if (error || !after) {
+  if (error) {
     console.error("receipt update failed", error);
     return NextResponse.json({ error: "update_failed" }, { status: 500 });
   }
+  if (!count || !after) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
 
-  const service = createServiceClient();
-  await service.from("audit_log").insert({
+  await writeAudit({
     user_id: user.id,
     entity_type: "receipt",
     entity_id: id,
@@ -110,8 +116,7 @@ export async function DELETE(_request: Request, ctx: Ctx) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const service = createServiceClient();
-  await service.from("audit_log").insert({
+  await writeAudit({
     user_id: user.id,
     entity_type: "receipt",
     entity_id: id,

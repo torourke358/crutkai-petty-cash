@@ -2,15 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { monthStartLocal, todayLocal } from "@/lib/format";
 import type { Department } from "@/lib/types";
-
-function monthStart(): string {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
-}
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 const inputClass =
   "mt-1 block w-full rounded-lg border border-slate-300 px-4 py-3 text-base text-slate-900 shadow-sm focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900";
@@ -20,8 +13,8 @@ export default function ExportForm({
 }: {
   departments: Department[];
 }) {
-  const [from, setFrom] = useState(monthStart());
-  const [to, setTo] = useState(today());
+  const [from, setFrom] = useState(monthStartLocal());
+  const [to, setTo] = useState(todayLocal());
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   function toggle(id: string) {

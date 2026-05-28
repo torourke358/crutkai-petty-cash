@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
+import { writeAudit } from "@/lib/audit";
+import { todayLocal } from "@/lib/format";
+import { CURRENCIES } from "@/lib/types";
 
 const bodySchema = z.object({
   // Null for manual entries (no photo). Photo flow always supplies a path.
@@ -8,7 +11,7 @@ const bodySchema = z.object({
   vendor: z.string().nullable().optional(),
   receipt_date: z.string().nullable().optional(),
   amount_total: z.number().nullable().optional(),
-  currency: z.string().default("USD"),
+  currency: z.enum(CURRENCIES).default("USD"),
   department_id: z.string().uuid(),
   // Accepted but ignored — the clients feature is hidden (kept for v2).
   client_id: z.string().uuid().nullable().optional(),
@@ -37,6 +40,12 @@ export async function POST(request: Request) {
   }
   const b = parsed.data;
 
+  // image_path must live under the caller's storage folder — otherwise a user
+  // could attach another user's photo to their own receipt.
+  if (b.image_path && !b.image_path.startsWith(`${user.id}/`)) {
+    return NextResponse.json({ error: "forbidden_path" }, { status: 403 });
+  }
+
   // RLS enforces user_id = auth.uid() on insert; set it explicitly.
   const { data: receipt, error } = await supabase
     .from("receipts")
@@ -44,7 +53,9 @@ export async function POST(request: Request) {
       user_id: user.id,
       image_path: b.image_path ?? null,
       vendor: b.vendor ?? null,
-      receipt_date: b.receipt_date || null,
+      // Default to today rather than null — the export filter (.gte/.lte on
+      // receipt_date) drops null-dated rows silently.
+      receipt_date: b.receipt_date || todayLocal(),
       amount_total: b.amount_total ?? null,
       currency: b.currency,
       department_id: b.department_id,
@@ -61,9 +72,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "insert_failed" }, { status: 500 });
   }
 
-  // Audit log has no INSERT policy under RLS — write via the service client.
-  const service = createServiceClient();
-  await service.from("audit_log").insert({
+  await writeAudit({
     user_id: user.id,
     entity_type: "receipt",
     entity_id: receipt.id,

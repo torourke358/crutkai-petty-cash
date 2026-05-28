@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { prepareImage } from "@/lib/image";
+import { todayLocal } from "@/lib/format";
 import ReceiptFormFields, {
   type ReceiptFormValues,
 } from "@/components/ReceiptFormFields";
@@ -12,13 +13,9 @@ import type { Department, Confidence } from "@/lib/types";
 
 type Stage = "capture" | "preview" | "reading" | "verify";
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 const emptyValues: ReceiptFormValues = {
   vendor: "",
-  receipt_date: todayStr(),
+  receipt_date: todayLocal(),
   amount_total: "",
   currency: "USD",
   department_id: "",
@@ -50,6 +47,10 @@ export default function NewReceiptPage() {
 
   const cameraRef = useRef<HTMLInputElement>(null);
   const libraryRef = useRef<HTMLInputElement>(null);
+  // Each call to autofillDepartment bumps this counter. The RPC callback no-ops
+  // if a newer item has loaded — otherwise a slow vendor lookup for receipt N
+  // can resolve after N+1 is on screen and write N's department onto N+1.
+  const autofillIdRef = useRef(0);
 
   useEffect(() => {
     supabase
@@ -65,9 +66,12 @@ export default function NewReceiptPage() {
   async function autofillDepartment(vendor: string) {
     const v = vendor.trim();
     if (!v) return;
+    autofillIdRef.current += 1;
+    const myId = autofillIdRef.current;
     const { data } = await supabase.rpc("vendor_default_department", {
       p_vendor: v,
     });
+    if (myId !== autofillIdRef.current) return; // a newer item is loaded
     if (data) {
       setValues((cur) =>
         cur.department_id ? cur : { ...cur, department_id: data as string },
@@ -107,7 +111,7 @@ export default function NewReceiptPage() {
     setImagePath(null);
     setConfidence(null);
     setAiExtraction(null);
-    setValues({ ...emptyValues, receipt_date: todayStr() });
+    setValues({ ...emptyValues, receipt_date: todayLocal() });
     setStage("verify");
   }
 
@@ -139,22 +143,18 @@ export default function NewReceiptPage() {
       .upload(path, prepared, { contentType: "image/jpeg" });
     if (uploadError) return null;
 
-    const { data: signed } = await supabase.storage
-      .from("receipts")
-      .createSignedUrl(path, 60);
-
+    // Hand the server the storage path; it signs the URL under the user's
+    // session and refuses paths outside the caller's folder.
     let extracted: Record<string, unknown> = {};
-    if (signed?.signedUrl) {
-      try {
-        const res = await fetch("/api/extract", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imageUrl: signed.signedUrl }),
-        });
-        extracted = await res.json();
-      } catch {
-        // Network error — fall through to a blank form.
-      }
+    try {
+      const res = await fetch("/api/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image_path: path }),
+      });
+      extracted = await res.json();
+    } catch {
+      // Network error — fall through to a blank form.
     }
     return { path, extracted };
   }
@@ -204,13 +204,17 @@ export default function NewReceiptPage() {
       setError(
         "We couldn't read this as a receipt. You can still enter the details by hand.",
       );
+    } else if (extracted.error === "extraction_failed") {
+      setError(
+        "We couldn't read this one. Try again, or fill in the details by hand.",
+      );
     }
     const vendor = (extracted.vendor as string) ?? "";
 
     setImagePath(path);
     setValues({
       vendor,
-      receipt_date: (extracted.receipt_date as string) || todayStr(),
+      receipt_date: (extracted.receipt_date as string) || todayLocal(),
       amount_total:
         extracted.amount_total != null ? String(extracted.amount_total) : "",
       currency: (extracted.currency as string) || "USD",

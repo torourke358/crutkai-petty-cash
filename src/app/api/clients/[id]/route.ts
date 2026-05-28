@@ -23,6 +23,19 @@ export async function PATCH(request: Request, ctx: Ctx) {
   }
 
   const supabase = await createClient();
+
+  // The seeded "Overhead" client is a fixed bucket the dashboard relies on —
+  // refuse to rename or deactivate it even if the UI's hidden buttons get
+  // bypassed.
+  const { data: existing } = await supabase
+    .from("clients")
+    .select("is_overhead")
+    .eq("id", id)
+    .single();
+  if (existing?.is_overhead) {
+    return NextResponse.json({ error: "overhead_locked" }, { status: 403 });
+  }
+
   const { data, error } = await supabase
     .from("clients")
     .update(parsed.data)

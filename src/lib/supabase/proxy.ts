@@ -43,19 +43,22 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/icon-") ||
     pathname === "/favicon.ico";
 
-  // Not logged in and not on the login page → send to login.
-  if (!user && !isAuthRoute && !isPublicAsset) {
+  // Redirect helper that forwards any refreshed-session cookies from
+  // supabaseResponse onto the redirect response — otherwise rotated tokens are
+  // silently dropped and the browser keeps replaying the expired ones.
+  function redirectTo(pathname: string) {
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
+    url.pathname = pathname;
+    const res = NextResponse.redirect(url);
+    supabaseResponse.cookies.getAll().forEach((c) => res.cookies.set(c));
+    return res;
   }
 
+  // Not logged in and not on the login page → send to login.
+  if (!user && !isAuthRoute && !isPublicAsset) return redirectTo("/login");
+
   // Logged in but sitting on the login page → send to the app.
-  if (user && isAuthRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/receipts";
-    return NextResponse.redirect(url);
-  }
+  if (user && isAuthRoute) return redirectTo("/receipts");
 
   return supabaseResponse;
 }
