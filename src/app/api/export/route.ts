@@ -63,21 +63,7 @@ export async function GET(request: Request) {
     (profiles ?? []).map((p) => [p.id, p.full_name] as const),
   );
 
-  // Signed image links (valid 7 days) for receipts that have a photo.
-  const paths = data
-    .map((r) => r.image_path)
-    .filter((p): p is string => !!p);
-  const urlByPath = new Map<string, string>();
-  if (paths.length > 0) {
-    const { data: signed } = await supabase.storage
-      .from("receipts")
-      .createSignedUrls(paths, 60 * 60 * 24 * 7);
-    for (const s of signed ?? []) {
-      if (s.path && s.signedUrl) urlByPath.set(s.path, s.signedUrl);
-    }
-  }
-
-  const buffer = await buildWorkbook(data, nameById, urlByPath);
+  const buffer = await buildWorkbook(data, nameById);
   const stamp = new Date().toISOString().slice(0, 10);
 
   return new NextResponse(buffer as ArrayBuffer, {
@@ -93,7 +79,6 @@ export async function GET(request: Request) {
 async function buildWorkbook(
   data: Row[],
   nameById: Map<string, string | null>,
-  urlByPath: Map<string, string>,
 ): Promise<ArrayBuffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Crutkai Petty Cash";
@@ -111,7 +96,6 @@ async function buildWorkbook(
     "Department",
     "User",
     "Notes",
-    "Image URL",
   ];
   ws.addRow(headers);
 
@@ -125,7 +109,6 @@ async function buildWorkbook(
   for (const r of data) {
     const date = toDate(r.receipt_date);
     const user = nameById.get(r.user_id) ?? "Unknown";
-    const imageUrl = r.image_path ? (urlByPath.get(r.image_path) ?? "") : "";
 
     const row = ws.addRow([
       date ?? "",
@@ -135,7 +118,6 @@ async function buildWorkbook(
       r.department?.name ?? "",
       user,
       r.notes ?? "",
-      imageUrl,
     ]);
     if (date) row.getCell(1).numFmt = "mm/dd/yyyy";
     row.getCell(3).numFmt = "#,##0.00";
@@ -147,7 +129,6 @@ async function buildWorkbook(
     note(4, r.department?.name);
     note(5, user);
     note(6, r.notes);
-    note(7, imageUrl);
   }
 
   // Header styling: bold on a slate-100 fill, frozen (set in views above).
@@ -168,9 +149,9 @@ async function buildWorkbook(
   totalRow.getCell(3).numFmt = "#,##0.00";
   totalRow.font = { bold: true };
 
-  // Apply auto-widths (clamp Notes / URL so they don't get absurdly wide).
+  // Apply auto-widths (clamp so a long Notes cell doesn't blow out the sheet).
   ws.columns.forEach((col, i) => {
-    col.width = Math.min(widths[i] + 2, i === 7 ? 50 : 40);
+    col.width = Math.min(widths[i] + 2, 40);
   });
 
   return wb.xlsx.writeBuffer();
