@@ -62,6 +62,12 @@ export default async function AppLayout({
                 </Link>
               </>
             )}
+            <Link
+              href="/account/password"
+              className="text-sm font-medium text-slate-500 hover:text-violet-700"
+            >
+              Password
+            </Link>
             <SignOutButton />
           </div>
         </div>

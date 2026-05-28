@@ -11,8 +11,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function signIn(then: "/receipts" | "/account/password") {
     setError(null);
     setLoading(true);
 
@@ -29,8 +28,13 @@ export default function LoginPage() {
     }
 
     // Full navigation so the proxy picks up the fresh session cookie.
-    router.push("/receipts");
+    router.push(then);
     router.refresh();
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    signIn("/receipts");
   }
 
   return (
@@ -92,6 +96,15 @@ export default function LoginPage() {
             className="flex w-full items-center justify-center rounded-xl bg-violet-600 px-4 py-3 text-base font-medium text-white transition-colors hover:bg-violet-700 disabled:opacity-60"
           >
             {loading ? "Signing in…" : "Sign in"}
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => signIn("/account/password")}
+            className="flex w-full items-center justify-center rounded-xl bg-white px-4 py-3 text-sm font-medium text-slate-700 ring-1 ring-slate-200 transition-colors hover:bg-slate-50 disabled:opacity-60"
+          >
+            Change my password
           </button>
         </form>
 
