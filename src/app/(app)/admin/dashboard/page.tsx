@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getUserRole } from "@/lib/auth";
 import { monthStartLocal, todayLocal } from "@/lib/format";
+import { departmentBadgeClass } from "@/lib/departments";
 import type { Department } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -12,9 +13,7 @@ interface Row {
   amount_total: number | null;
   currency: string;
   department_id: string | null;
-  client_id: string | null;
-  department: { name: string } | null;
-  client: { name: string; is_overhead: boolean } | null;
+  department: { code: string; name: string } | null;
 }
 
 function money(n: number): string {
@@ -50,7 +49,7 @@ export default async function DashboardPage({
     supabase
       .from("receipts")
       .select(
-        "user_id, amount_total, currency, department_id, client_id, department:departments(name), client:clients(name, is_overhead)",
+        "user_id, amount_total, currency, department_id, department:departments(code, name)",
       )
       .gte("receipt_date", from)
       .lte("receipt_date", to)
@@ -64,58 +63,19 @@ export default async function DashboardPage({
   const currencies = [...new Set(data.map((r) => r.currency).filter(Boolean))];
   const currencyLabel = currencies.length === 1 ? currencies[0] : "mixed";
 
-  // Client × Department matrix.
-  const UNASSIGNED = "Unassigned";
-  type ClientAgg = {
-    name: string;
-    isOverhead: boolean;
-    byDept: Record<string, number>;
-    total: number;
-  };
-  const clientMap = new Map<string, ClientAgg>();
-  const deptTotals: Record<string, number> = {};
+  // Aggregate spend by department + total + per-user in one pass.
+  const deptTotals = new Map<string, number>();
+  const userTotals = new Map<string, number>();
   let grandTotal = 0;
 
   for (const r of data) {
     const amt = Number(r.amount_total ?? 0);
-    const clientName = r.client?.name ?? UNASSIGNED;
-    const deptName = r.department?.name ?? UNASSIGNED;
-
-    if (!clientMap.has(clientName)) {
-      clientMap.set(clientName, {
-        name: clientName,
-        isOverhead: r.client?.is_overhead ?? false,
-        byDept: {},
-        total: 0,
-      });
-    }
-    const agg = clientMap.get(clientName)!;
-    agg.byDept[deptName] = (agg.byDept[deptName] ?? 0) + amt;
-    agg.total += amt;
-    deptTotals[deptName] = (deptTotals[deptName] ?? 0) + amt;
+    const deptId = r.department_id ?? "unassigned";
+    deptTotals.set(deptId, (deptTotals.get(deptId) ?? 0) + amt);
+    userTotals.set(r.user_id, (userTotals.get(r.user_id) ?? 0) + amt);
     grandTotal += amt;
   }
 
-  const clientRows = [...clientMap.values()].sort((a, b) => {
-    if (a.isOverhead !== b.isOverhead) return a.isOverhead ? 1 : -1; // overhead last
-    return b.total - a.total;
-  });
-
-  const billable = clientRows
-    .filter((c) => !c.isOverhead && c.name !== UNASSIGNED)
-    .reduce((s, c) => s + c.total, 0);
-  const overhead = clientRows
-    .filter((c) => c.isOverhead)
-    .reduce((s, c) => s + c.total, 0);
-
-  // By crew member.
-  const userTotals = new Map<string, number>();
-  for (const r of data) {
-    userTotals.set(
-      r.user_id,
-      (userTotals.get(r.user_id) ?? 0) + Number(r.amount_total ?? 0),
-    );
-  }
   const userIds = [...userTotals.keys()];
   const { data: profiles } = await supabase
     .from("user_profiles")
@@ -128,7 +88,14 @@ export default async function DashboardPage({
     .map(([uid, total]) => ({ name: nameById.get(uid) ?? "Unknown", total }))
     .sort((a, b) => b.total - a.total);
 
-  const colTotal = (name: string) => deptTotals[name] ?? 0;
+  const deptRows = depts
+    .map((d) => ({
+      code: d.code,
+      name: d.name,
+      total: deptTotals.get(d.id) ?? 0,
+    }))
+    .sort((a, b) => b.total - a.total);
+  const unassignedTotal = deptTotals.get("unassigned") ?? 0;
 
   return (
     <div className="space-y-6">
@@ -165,8 +132,6 @@ export default async function DashboardPage({
       <div className="grid grid-cols-2 gap-3">
         <StatCard label="Total spend" value={money(grandTotal)} suffix={currencyLabel} />
         <StatCard label="Receipts" value={String(data.length)} />
-        <StatCard label="Billable to clients" value={money(billable)} suffix={currencyLabel} />
-        <StatCard label="Overhead" value={money(overhead)} suffix={currencyLabel} />
       </div>
 
       {currencyLabel === "mixed" && (
@@ -177,80 +142,50 @@ export default async function DashboardPage({
         </p>
       )}
 
-      {/* Client × Department matrix */}
+      {/* By department */}
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-slate-900">
-          By client &amp; department
-        </h2>
-        <div className="-mx-4 overflow-x-auto px-4">
-          <table className="w-full min-w-[640px] border-separate border-spacing-0 text-sm">
-            <thead>
-              <tr className="text-left text-slate-500">
-                <th className="sticky left-0 bg-background py-2 pr-3 font-medium">
-                  Client
-                </th>
-                {depts.map((d) => (
-                  <th key={d.id} className="px-3 py-2 text-right font-medium">
-                    {d.name}
-                  </th>
-                ))}
-                <th className="px-3 py-2 text-right font-semibold text-slate-700">
-                  Total
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {clientRows.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={depts.length + 2}
-                    className="py-6 text-center text-slate-400"
+        <h2 className="text-sm font-semibold text-slate-900">By department</h2>
+        <ul className="divide-y divide-slate-100 overflow-hidden rounded-2xl bg-white ring-1 ring-slate-100">
+          {deptRows.length === 0 ? (
+            <li className="p-4 text-center text-slate-400">
+              No receipts in this range.
+            </li>
+          ) : (
+            <>
+              {deptRows.map((d) => (
+                <li
+                  key={d.code}
+                  className="flex items-center justify-between p-3"
+                >
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${departmentBadgeClass(
+                      d.code,
+                    )}`}
                   >
-                    No receipts in this range.
-                  </td>
-                </tr>
-              ) : (
-                clientRows.map((c) => (
-                  <tr key={c.name} className="border-t border-slate-100">
-                    <td className="sticky left-0 bg-white py-2 pr-3 font-medium text-slate-900">
-                      {c.name}
-                      {c.isOverhead && (
-                        <span className="ml-1 text-xs text-slate-400">
-                          (overhead)
-                        </span>
-                      )}
-                    </td>
-                    {depts.map((d) => (
-                      <td key={d.id} className="px-3 py-2 text-right tabular-nums text-slate-600">
-                        {c.byDept[d.name] ? money(c.byDept[d.name]) : "—"}
-                      </td>
-                    ))}
-                    <td className="px-3 py-2 text-right font-semibold tabular-nums text-slate-900">
-                      {money(c.total)}
-                    </td>
-                  </tr>
-                ))
+                    {d.name}
+                  </span>
+                  <span className="font-semibold tabular-nums text-slate-900">
+                    {money(d.total)}{" "}
+                    <span className="text-xs font-normal text-slate-400">
+                      {currencyLabel}
+                    </span>
+                  </span>
+                </li>
+              ))}
+              {unassignedTotal > 0 && (
+                <li className="flex items-center justify-between p-3">
+                  <span className="text-sm text-slate-500">Unassigned</span>
+                  <span className="font-semibold tabular-nums text-slate-900">
+                    {money(unassignedTotal)}{" "}
+                    <span className="text-xs font-normal text-slate-400">
+                      {currencyLabel}
+                    </span>
+                  </span>
+                </li>
               )}
-            </tbody>
-            {clientRows.length > 0 && (
-              <tfoot>
-                <tr className="border-t-2 border-slate-200">
-                  <td className="sticky left-0 bg-background py-2 pr-3 font-semibold text-slate-900">
-                    Total
-                  </td>
-                  {depts.map((d) => (
-                    <td key={d.id} className="px-3 py-2 text-right font-semibold tabular-nums text-slate-700">
-                      {colTotal(d.name) ? money(colTotal(d.name)) : "—"}
-                    </td>
-                  ))}
-                  <td className="px-3 py-2 text-right font-bold tabular-nums text-slate-900">
-                    {money(grandTotal)}
-                  </td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
+            </>
+          )}
+        </ul>
       </section>
 
       {/* By crew member */}

@@ -180,7 +180,7 @@ export default function ReceiptsList({
                 : "bg-white text-slate-600"
             }`}
           >
-            All words
+            and
           </button>
           <button
             onClick={() => setMatchMode("any")}
@@ -190,7 +190,7 @@ export default function ReceiptsList({
                 : "bg-white text-slate-600"
             }`}
           >
-            Any word
+            or
           </button>
         </div>
         <button
