@@ -26,6 +26,26 @@ function money(n: number): string {
 const inputClass =
   "mt-1 block w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200";
 
+// One row of "amount currency" lines (stacked) — used on every spend cell so
+// mixed-currency totals show each currency on its own line instead of adding
+// them together.
+function CurrencyTotals({ amounts }: { amounts: Map<string, number> }) {
+  const entries = [...amounts.entries()].sort((a, b) => b[1] - a[1]);
+  if (entries.length === 0) {
+    return <span className="text-slate-300">—</span>;
+  }
+  return (
+    <span className="flex flex-col items-end gap-0.5">
+      {entries.map(([cur, amt]) => (
+        <span key={cur} className="font-semibold tabular-nums text-slate-900">
+          {money(amt)}{" "}
+          <span className="text-xs font-normal text-slate-400">{cur}</span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -59,21 +79,43 @@ export default async function DashboardPage({
   const depts = departments ?? [];
   const data = rows ?? [];
 
-  // Currency note: totals only make sense within one currency (no FX in v1).
-  const currencies = [...new Set(data.map((r) => r.currency).filter(Boolean))];
-  const currencyLabel = currencies.length === 1 ? currencies[0] : "mixed";
+  // Aggregate as currency -> amount Maps everywhere so the UI can render each
+  // currency on its own line and nothing gets summed across currencies.
+  const grandTotal = new Map<string, number>();
+  const deptTotals = new Map<string, Map<string, number>>();
+  const userTotals = new Map<string, Map<string, number>>();
 
-  // Aggregate spend by department + total + per-user in one pass.
-  const deptTotals = new Map<string, number>();
-  const userTotals = new Map<string, number>();
-  let grandTotal = 0;
+  function bump(m: Map<string, number>, cur: string, amt: number) {
+    m.set(cur, (m.get(cur) ?? 0) + amt);
+  }
+  function getOrInit(
+    m: Map<string, Map<string, number>>,
+    key: string,
+  ): Map<string, number> {
+    let inner = m.get(key);
+    if (!inner) {
+      inner = new Map();
+      m.set(key, inner);
+    }
+    return inner;
+  }
 
   for (const r of data) {
+    const cur = r.currency || "USD";
     const amt = Number(r.amount_total ?? 0);
     const deptId = r.department_id ?? "unassigned";
-    deptTotals.set(deptId, (deptTotals.get(deptId) ?? 0) + amt);
-    userTotals.set(r.user_id, (userTotals.get(r.user_id) ?? 0) + amt);
-    grandTotal += amt;
+    bump(grandTotal, cur, amt);
+    bump(getOrInit(deptTotals, deptId), cur, amt);
+    bump(getOrInit(userTotals, r.user_id), cur, amt);
+  }
+
+  // Sort helper: rank rows by the sum of their absolute amounts (mixing
+  // currencies for sort order only — display stays separated).
+  function rank(amounts: Map<string, number> | undefined): number {
+    if (!amounts) return 0;
+    let n = 0;
+    for (const v of amounts.values()) n += Math.abs(v);
+    return n;
   }
 
   const userIds = [...userTotals.keys()];
@@ -85,17 +127,20 @@ export default async function DashboardPage({
     (profiles ?? []).map((p) => [p.id, p.full_name] as const),
   );
   const crewRows = [...userTotals.entries()]
-    .map(([uid, total]) => ({ name: nameById.get(uid) ?? "Unknown", total }))
-    .sort((a, b) => b.total - a.total);
+    .map(([uid, amounts]) => ({
+      name: nameById.get(uid) ?? "Unknown",
+      amounts,
+    }))
+    .sort((a, b) => rank(b.amounts) - rank(a.amounts));
 
   const deptRows = depts
     .map((d) => ({
       code: d.code,
       name: d.name,
-      total: deptTotals.get(d.id) ?? 0,
+      amounts: deptTotals.get(d.id) ?? new Map<string, number>(),
     }))
-    .sort((a, b) => b.total - a.total);
-  const unassignedTotal = deptTotals.get("unassigned") ?? 0;
+    .sort((a, b) => rank(b.amounts) - rank(a.amounts));
+  const unassignedAmounts = deptTotals.get("unassigned");
 
   return (
     <div className="space-y-6">
@@ -130,17 +175,9 @@ export default async function DashboardPage({
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3">
-        <StatCard label="Total spend" value={money(grandTotal)} suffix={currencyLabel} />
+        <TotalCard amounts={grandTotal} />
         <StatCard label="Receipts" value={String(data.length)} />
       </div>
-
-      {currencyLabel === "mixed" && (
-        <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Receipts in this range span multiple currencies, so totals add
-          different currencies together. Filter to one currency for an accurate
-          total (v1 has no currency conversion).
-        </p>
-      )}
 
       {/* By department */}
       <section className="space-y-2">
@@ -155,7 +192,7 @@ export default async function DashboardPage({
               {deptRows.map((d) => (
                 <li
                   key={d.code}
-                  className="flex items-center justify-between p-3"
+                  className="flex items-center justify-between gap-3 p-3"
                 >
                   <span
                     className={`rounded-full px-2 py-0.5 text-xs font-medium ${departmentBadgeClass(
@@ -164,23 +201,13 @@ export default async function DashboardPage({
                   >
                     {d.name}
                   </span>
-                  <span className="font-semibold tabular-nums text-slate-900">
-                    {money(d.total)}{" "}
-                    <span className="text-xs font-normal text-slate-400">
-                      {currencyLabel}
-                    </span>
-                  </span>
+                  <CurrencyTotals amounts={d.amounts} />
                 </li>
               ))}
-              {unassignedTotal > 0 && (
-                <li className="flex items-center justify-between p-3">
+              {unassignedAmounts && unassignedAmounts.size > 0 && (
+                <li className="flex items-center justify-between gap-3 p-3">
                   <span className="text-sm text-slate-500">Unassigned</span>
-                  <span className="font-semibold tabular-nums text-slate-900">
-                    {money(unassignedTotal)}{" "}
-                    <span className="text-xs font-normal text-slate-400">
-                      {currencyLabel}
-                    </span>
-                  </span>
+                  <CurrencyTotals amounts={unassignedAmounts} />
                 </li>
               )}
             </>
@@ -196,14 +223,12 @@ export default async function DashboardPage({
             <li className="p-4 text-center text-slate-400">No receipts.</li>
           ) : (
             crewRows.map((u) => (
-              <li key={u.name} className="flex items-center justify-between p-3">
+              <li
+                key={u.name}
+                className="flex items-center justify-between gap-3 p-3"
+              >
                 <span className="font-medium text-slate-700">{u.name}</span>
-                <span className="font-semibold tabular-nums text-slate-900">
-                  {money(u.total)}{" "}
-                  <span className="text-xs font-normal text-slate-400">
-                    {currencyLabel}
-                  </span>
-                </span>
+                <CurrencyTotals amounts={u.amounts} />
               </li>
             ))
           )}
@@ -213,14 +238,42 @@ export default async function DashboardPage({
   );
 }
 
+function TotalCard({ amounts }: { amounts: Map<string, number> }) {
+  const entries = [...amounts.entries()].sort((a, b) => b[1] - a[1]);
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+        Total spend
+      </p>
+      {entries.length === 0 ? (
+        <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">
+          0.00
+        </p>
+      ) : (
+        <div className="mt-1 space-y-0.5">
+          {entries.map(([cur, amt]) => (
+            <p
+              key={cur}
+              className="text-2xl font-semibold leading-tight tabular-nums text-slate-900"
+            >
+              {money(amt)}
+              <span className="ml-1 text-sm font-normal text-slate-400">
+                {cur}
+              </span>
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StatCard({
   label,
   value,
-  suffix,
 }: {
   label: string;
   value: string;
-  suffix?: string;
 }) {
   return (
     <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
@@ -229,11 +282,6 @@ function StatCard({
       </p>
       <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">
         {value}
-        {suffix && (
-          <span className="ml-1 text-sm font-normal text-slate-400">
-            {suffix}
-          </span>
-        )}
       </p>
     </div>
   );
