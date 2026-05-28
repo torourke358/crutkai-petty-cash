@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getUserRole } from "@/lib/auth";
 import ReceiptsList, { type ReceiptCard } from "@/components/ReceiptsList";
-import type { Department } from "@/lib/types";
+import type { Category, Department } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +14,7 @@ interface ReceiptRow {
   receipt_date: string | null;
   image_path: string | null;
   notes: string | null;
+  category: Category;
   department_id: string | null;
   department: { code: string; name: string } | null;
 }
@@ -28,7 +29,7 @@ export default async function ReceiptsPage() {
     supabase
       .from("receipts")
       .select(
-        "id, user_id, vendor, amount_total, currency, receipt_date, image_path, notes, department_id, department:departments(code, name)",
+        "id, user_id, vendor, amount_total, currency, receipt_date, image_path, notes, category, department_id, department:departments(code, name)",
       )
       // Load a wide window so client-side search + date filtering can reach
       // back across real history (e.g. searching February later in the year).
@@ -82,6 +83,7 @@ export default async function ReceiptsPage() {
     currency: r.currency,
     receipt_date: r.receipt_date,
     notes: r.notes,
+    category: r.category,
     departmentId: r.department_id,
     departmentCode: r.department?.code ?? null,
     departmentName: r.department?.name ?? null,

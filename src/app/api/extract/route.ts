@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
 import { buildExtractionPrompt } from "@/lib/extraction-prompt";
-import { CURRENCIES } from "@/lib/types";
+import { CURRENCIES, CATEGORIES } from "@/lib/types";
 
 const MODEL = "claude-sonnet-4-6";
 
@@ -157,11 +157,20 @@ export async function POST(request: Request) {
     ? aiCurrency
     : "USD";
 
+  // Clamp category the same way — fall back to "other" if the AI returns
+  // something unexpected.
+  const aiCategory =
+    typeof parsed.category === "string" ? parsed.category : "";
+  const category = (CATEGORIES as readonly string[]).includes(aiCategory)
+    ? aiCategory
+    : "other";
+
   return NextResponse.json({
     vendor: parsed.vendor ?? null,
     receipt_date: parsed.receipt_date ?? null,
     amount_total: parsed.amount_total ?? null,
     currency,
+    category,
     line_items: Array.isArray(parsed.line_items) ? parsed.line_items : [],
     confidence: parsed.confidence ?? "low",
     notes: parsed.notes ?? null,
